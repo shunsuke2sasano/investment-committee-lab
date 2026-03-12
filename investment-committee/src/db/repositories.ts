@@ -138,6 +138,16 @@ export const verdictRepository = {
       .reverse()
       .first()
   },
+  /** Single table scan → latest VerdictReport per company (keyed by companyId) */
+  async listLatestAll(): Promise<Map<string, VerdictReport>> {
+    const all = await db.verdict_reports.toArray()
+    const map = new Map<string, VerdictReport>()
+    all.forEach(v => {
+      const existing = map.get(v.companyId)
+      if (!existing || v.createdAt > existing.createdAt) map.set(v.companyId, v)
+    })
+    return map
+  },
   async save(input: Omit<VerdictReport, 'id'>) {
     const row: VerdictReport = { ...input, id: uid() }
     await db.verdict_reports.add(row)
@@ -147,6 +157,9 @@ export const verdictRepository = {
 
 // ── Monitoring ────────────────────────────────────────────────────────────
 export const monitoringRepository = {
+  async listAll() {
+    return db.monitoring_plans.toArray()
+  },
   async get(companyId: string) {
     return db.monitoring_plans
       .where('companyId').equals(companyId)

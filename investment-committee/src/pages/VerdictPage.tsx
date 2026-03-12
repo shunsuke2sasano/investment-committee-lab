@@ -6,13 +6,49 @@ import {
 } from '../components/common/ui'
 import { useStore } from '../state/store'
 import { t } from '../lib/i18n'
+import type { Lang } from '../lib/i18n'
 import {
   verdictRepository, valuationRepository, dataAnalysisRepository,
-  thesisRepository
+  marketAnalysisRepository,
 } from '../db/repositories'
 import { calculateVerdict } from '../lib/calculators'
-import type { VerdictAxes, AxisScore, VerdictReport } from '../types/domain'
+import type { VerdictAxes, AxisScore, VerdictReport, DataAnalysis, MarketAnalysis } from '../types/domain'
 import { VERDICT_PROFILES } from '../types/domain'
+
+// ── Feed types ─────────────────────────────────────────────────────────────
+type FeedSource = 'data' | 'market'
+
+interface FeedSuggestion {
+  score: 1 | 2 | 3 | 4 | 5
+  source: FeedSource
+  detail: string  // short note shown in badge
+}
+
+type LaneFeed = Partial<Record<keyof VerdictAxes, FeedSuggestion>>
+
+function gapToScore(gap: number): 1 | 2 | 3 | 4 | 5 {
+  if (gap >= 10) return 5
+  if (gap >= 5)  return 4
+  if (gap >= 0)  return 3
+  if (gap >= -5) return 2
+  return 1
+}
+
+function buildFeed(data: DataAnalysis | null | undefined, market: MarketAnalysis | null | undefined): LaneFeed {
+  const feed: LaneFeed = {}
+  if (data) {
+    feed.businessQuality    = { score: data.scores.businessQuality,    source: 'data',   detail: `BQ ${data.scores.businessQuality}/5` }
+    feed.capitalEfficiency  = { score: data.scores.capitalEfficiency,  source: 'data',   detail: `CE ${data.scores.capitalEfficiency}/5` }
+    feed.balanceSheetSafety = { score: data.scores.balanceSheetSafety, source: 'data',   detail: `BS ${data.scores.balanceSheetSafety}/5` }
+  }
+  if (market?.outputs.marketExpectationGap != null) {
+    const gap = market.outputs.marketExpectationGap
+    const score = gapToScore(gap)
+    const sign = gap >= 0 ? '+' : ''
+    feed.marketExpectationGap = { score, source: 'market', detail: `Gap ${sign}${gap.toFixed(1)}%` }
+  }
+  return feed
+}
 
 // ── Axis definitions ──────────────────────────────────────────────────────
 const AXES: {
@@ -52,20 +88,24 @@ export default function VerdictPage() {
   const [loading, setLoading] = useState(false)
   const [cagrBlocked, setCagrBlocked] = useState(false)
   const [profileId, setProfileId] = useState<'conservative' | 'standard' | 'aggressive'>(activeProfile.id)
+  const [feed, setFeed] = useState<LaneFeed>({})
 
   useEffect(() => {
     if (!companyId) return
-    verdictRepository.getLatest(companyId).then(v => {
-      if (v) {
-        setAxes(v.axisScores)
-        setRationale(v.rationale)
-        setSaved(v)
-        setProfileId(v.profileUsed.id)
+    Promise.all([
+      verdictRepository.getLatest(companyId),
+      valuationRepository.getLatest(companyId),
+      dataAnalysisRepository.getLatest(companyId),
+      marketAnalysisRepository.getLatest(companyId),
+    ]).then(([verdict, valuation, data, market]) => {
+      if (verdict) {
+        setAxes(verdict.axisScores)
+        setRationale(verdict.rationale)
+        setSaved(verdict)
+        setProfileId(verdict.profileUsed.id)
       }
-    })
-    // Check valuation gate
-    valuationRepository.getLatest(companyId).then(v => {
-      if (v && v.cagrGate === 'block') setCagrBlocked(true)
+      if (valuation?.cagrGate === 'block') setCagrBlocked(true)
+      setFeed(buildFeed(data, market))
     })
   }, [companyId])
 
@@ -74,6 +114,16 @@ export default function VerdictPage() {
 
   function updateAxis(key: keyof VerdictAxes, patch: Partial<AxisScore>) {
     setAxes(p => ({ ...p, [key]: { ...p[key], ...patch } }))
+  }
+
+  function applyAllSuggestions() {
+    setAxes(p => {
+      const next = { ...p }
+      ;(Object.entries(feed) as [keyof VerdictAxes, FeedSuggestion][]).forEach(([key, suggestion]) => {
+        next[key] = { ...next[key], score: suggestion.score }
+      })
+      return next
+    })
   }
 
   async function handleSave() {
@@ -92,13 +142,13 @@ export default function VerdictPage() {
         createdAt: new Date().toISOString(),
       })
       setSaved(v)
-      // Update company status to active
       showToast(`Verdict: ${verdict}`, 'success')
     } catch { showToast(t('saveFailed', lang), 'error') }
     setLoading(false)
   }
 
   const verdictColor = verdict === 'BUY' ? T.green : verdict === 'WATCH' ? T.yellow : T.red
+  const feedCount = Object.keys(feed).length
 
   return (
     <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -122,7 +172,7 @@ export default function VerdictPage() {
         {/* Score summary */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 24 }}>
           <div style={{ border: `2px solid ${verdictColor}`, padding: '18px 20px', background: `rgba(${hexRgb(verdictColor)},0.08)`, textAlign: 'center', gridColumn: 'span 1' }}>
-            <div style={{ color: T.textMid, fontSize: 9, letterSpacing: 3, marginBottom: 8 }}>{t("finalVerdict", lang)}</div>
+            <div style={{ color: T.textMid, fontSize: 9, letterSpacing: 3, marginBottom: 8 }}>{t('finalVerdict', lang)}</div>
             <VerdictBadge verdict={verdict} />
           </div>
           <div style={{ border: `1px solid ${T.borderDim}`, padding: '18px 20px', background: '#080D12', textAlign: 'center' }}>
@@ -143,17 +193,31 @@ export default function VerdictPage() {
           </div>
         </div>
 
-        {/* Axis scoring */}
-        <SectionHeader label="8-AXIS EVALUATION" color={T.pink} />
+        {/* 8-axis header with Apply All button */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ flex: 1 }}>
+            <SectionHeader label="8-AXIS EVALUATION" color={T.pink} />
+          </div>
+          {feedCount > 0 && (
+            <Button onClick={applyAllSuggestions} accent={T.cyan} size="sm" variant="ghost">
+              {t('feedApplyAll', lang)}
+              <span style={{ color: T.textDim, fontSize: 9 }}>({feedCount})</span>
+            </Button>
+          )}
+        </div>
         <div style={{ marginBottom: 10, color: T.textDim, fontSize: 10 }}>
           各軸 1-5点。Vetoはチェックすると即PASS（Conservative/Standard）または判定に影響。根拠を必ず記入。
         </div>
+
+        {/* Axis scoring */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
           {AXES.map(axis => (
             <AxisCard
               key={axis.key}
               axis={axis}
               value={axes[axis.key]}
+              suggestion={feed[axis.key]}
+              lang={lang}
               onChange={patch => updateAxis(axis.key, patch)}
             />
           ))}
@@ -177,12 +241,15 @@ export default function VerdictPage() {
 }
 
 // ── Axis card ─────────────────────────────────────────────────────────────
-function AxisCard({ axis, value, onChange }: {
+function AxisCard({ axis, value, suggestion, lang, onChange }: {
   axis: typeof AXES[0]
   value: AxisScore
+  suggestion?: FeedSuggestion
+  lang: Lang
   onChange: (patch: Partial<AxisScore>) => void
 }) {
   const scoreColor = value.score >= 4 ? T.green : value.score >= 3 ? T.yellow : T.red
+  const sugColor = suggestion?.source === 'data' ? T.cyan : T.purple
 
   return (
     <div style={{
@@ -201,7 +268,7 @@ function AxisCard({ axis, value, onChange }: {
       </div>
 
       {/* Score selector */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: suggestion ? 6 : 10 }}>
         {[1, 2, 3, 4, 5].map(s => (
           <button key={s} onClick={() => onChange({ score: s as 1|2|3|4|5 })}
             style={{
@@ -216,6 +283,42 @@ function AxisCard({ axis, value, onChange }: {
           </button>
         ))}
       </div>
+
+      {/* Feed suggestion badge */}
+      {suggestion && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 10, padding: '5px 8px',
+          background: `rgba(${hexRgb(sugColor)},0.06)`,
+          border: `1px solid ${sugColor}33`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ color: sugColor, fontSize: 9, letterSpacing: 1 }}>
+              {suggestion.source === 'data' ? t('feedFromDataLane', lang) : t('feedFromMarketLane', lang)}
+            </span>
+            <span style={{ color: T.textDim, fontSize: 9 }}>
+              {t('feedSuggested', lang, { score: suggestion.score })}
+            </span>
+            <span style={{ color: sugColor, fontSize: 9, opacity: 0.7 }}>({suggestion.detail})</span>
+          </div>
+          {value.score !== suggestion.score && (
+            <button
+              onClick={() => onChange({ score: suggestion.score })}
+              style={{
+                background: `rgba(${hexRgb(sugColor)},0.12)`,
+                border: `1px solid ${sugColor}`,
+                color: sugColor,
+                padding: '2px 10px', cursor: 'pointer',
+                fontFamily: "'Courier New',monospace", fontSize: 9, letterSpacing: 1,
+              }}>
+              {t('feedApply', lang)}
+            </button>
+          )}
+          {value.score === suggestion.score && (
+            <span style={{ color: sugColor, fontSize: 9, opacity: 0.6 }}>✓</span>
+          )}
+        </div>
+      )}
 
       {/* Comment */}
       <textarea
@@ -236,7 +339,7 @@ function AxisCard({ axis, value, onChange }: {
         <input type="checkbox" checked={value.veto} onChange={e => onChange({ veto: e.target.checked })}
           style={{ accentColor: T.red, width: 14, height: 14 }} />
         <span style={{ color: value.veto ? T.red : T.textDim, fontSize: 10, letterSpacing: 2 }}>
-          {t("vetoLabel", lang)}{axis.vetoExample}
+          {t('vetoLabel', lang)}{axis.vetoExample}
         </span>
       </label>
     </div>

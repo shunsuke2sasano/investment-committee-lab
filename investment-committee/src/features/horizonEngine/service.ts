@@ -1,4 +1,5 @@
 import type { CollapseCondition, TimeToValidate } from '../types/domain'
+import { settingsRepository } from '../../db/repositories'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AI HORIZON ESTIMATOR
@@ -43,6 +44,13 @@ interface EstimateOutput {
   reasoning: string
 }
 
+async function resolveApiKey(): Promise<string> {
+  const settings = await settingsRepository.get()
+  const dbKey = (settings.anthropicApiKey ?? '').trim()
+  if (dbKey) return dbKey
+  return (import.meta as any).env?.VITE_ANTHROPIC_API_KEY ?? ''
+}
+
 export async function estimateTimeToValidate(
   conditions: CollapseCondition[],
   thesisText: string
@@ -50,6 +58,9 @@ export async function estimateTimeToValidate(
   // 未推定の条件のみ対象
   const targets = conditions.filter(c => c.timeToValidate === null && c.label.trim())
   if (targets.length === 0) return new Map()
+
+  const apiKey = await resolveApiKey()
+  if (!apiKey) throw new Error('APIキーが未設定です。Settings画面で設定してください。')
 
   const payload: EstimateInput[] = targets.map(c => ({
     id: c.id,
@@ -69,7 +80,7 @@ ${JSON.stringify(payload, null, 2)}`
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': (import.meta as any).env?.VITE_ANTHROPIC_API_KEY ?? '',
+      'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true',
     },
@@ -143,11 +154,14 @@ Basis: ${params.basis}
 Valuation optimal: ${params.valuationOptimalMonths ? `${params.valuationOptimalMonths} months` : 'not calculated'}
 `
 
+  const apiKey = await resolveApiKey()
+  if (!apiKey) throw new Error('APIキーが未設定です。Settings画面で設定してください。')
+
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': (import.meta as any).env?.VITE_ANTHROPIC_API_KEY ?? '',
+      'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true',
     },

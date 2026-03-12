@@ -1,5 +1,5 @@
 import React from 'react'
-import { T, Button, Select, PageLayout, SectionHeader, hexRgb, NumericInput, Input } from '../components/common/ui'
+import { T, Button, Select, PageLayout, SectionHeader, hexRgb, NumericInput, Input, css } from '../components/common/ui'
 import { useStore } from '../state/store'
 import { settingsRepository, exportImport } from '../db/repositories'
 import { VERDICT_PROFILES } from '../types/domain'
@@ -9,6 +9,12 @@ import type { Lang } from '../lib/i18n'
 export default function SettingsPage() {
   const { settings, setSettings, setActiveProfileId, showToast, lang, setLang } = useStore()
   const [loading, setLoading] = React.useState(false)
+  const [showKey, setShowKey] = React.useState(false)
+
+  const envKey: string = (import.meta as any).env?.VITE_ANTHROPIC_API_KEY ?? ''
+  const dbKey = settings?.anthropicApiKey ?? ''
+  const hasDbKey = dbKey.trim().length > 0
+  const hasEnvKey = envKey.trim().length > 0
 
   async function handleSave() {
     if (!settings) return
@@ -54,6 +60,52 @@ export default function SettingsPage() {
                 {l === 'en' ? 'ENGLISH' : '日本語'}
               </button>
             ))}
+          </div>
+
+          {/* ── API Key ───────────────────────────────────────────────── */}
+          <SectionHeader label={t('apiKeySection', lang)} color={T.cyan} />
+          <div style={{ marginBottom: 14 }}>
+            <label style={css.label}>{t('apiKeyLabel', lang)}</label>
+            <div style={{ display: 'flex' }}>
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={settings?.anthropicApiKey ?? ''}
+                placeholder={t('apiKeyPlaceholder', lang)}
+                onChange={e => settings && setSettings({ ...settings, anthropicApiKey: e.target.value || null })}
+                style={{
+                  ...css.input, flex: 1,
+                  borderRight: 'none',
+                  fontFamily: showKey ? "'Courier New', monospace" : 'monospace',
+                  letterSpacing: showKey ? 'normal' : '0.15em',
+                }}
+                onFocus={e => { e.target.style.borderColor = T.cyan }}
+                onBlur={e => { e.target.style.borderColor = T.borderDim }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(s => !s)}
+                style={{
+                  padding: '9px 14px', cursor: 'pointer',
+                  background: '#080D12',
+                  border: `1px solid ${T.borderDim}`,
+                  color: T.textDim,
+                  fontFamily: "'Courier New', monospace",
+                  fontSize: 9, letterSpacing: 2,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {showKey ? t('apiKeyHide', lang) : t('apiKeyShow', lang)}
+              </button>
+            </div>
+            <div style={{ marginTop: 6, fontSize: 10 }}>
+              {hasDbKey ? (
+                <span style={{ color: T.green }}>{t('apiKeySetStatus', lang)}</span>
+              ) : hasEnvKey ? (
+                <span style={{ color: T.yellow }}>{t('apiKeyEnvNote', lang)}</span>
+              ) : (
+                <span style={{ color: T.red }}>{t('apiKeyNotSetNote', lang)}</span>
+              )}
+            </div>
           </div>
 
           <SectionHeader label={t('verdictProfileSection', lang)} color={T.pink} />

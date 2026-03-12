@@ -42,6 +42,25 @@ export class InvestmentCommitteeDB extends Dexie {
       metric_snapshots:  'id, asOfDate',
       app_settings:      'id',
     })
+
+    // v2: add anthropicApiKey to app_settings
+    this.version(2).stores({
+      companies:         'id, ticker, status, updatedAt',
+      thesis_analyses:   'id, companyId, version, updatedAt',
+      data_analyses:     'id, companyId, computedAt',
+      market_analyses:   'id, companyId, computedAt',
+      review_reports:    'id, companyId, createdAt',
+      valuation_reports: 'id, companyId, createdAt',
+      verdict_reports:   'id, companyId, createdAt',
+      monitoring_plans:  'id, companyId, updatedAt',
+      lesson_records:    'id, companyId, ticker, phase, createdAt',
+      metric_snapshots:  'id, asOfDate',
+      app_settings:      'id',
+    }).upgrade(tx =>
+      tx.table('app_settings').toCollection().modify(record => {
+        if (record.anthropicApiKey === undefined) record.anthropicApiKey = null
+      })
+    )
   }
 }
 
@@ -59,6 +78,7 @@ export async function initDefaultSettings() {
       cagrGateMin: 12,
       defaultHorizonMonths: 36,
       benchmarkLabel: 'S&P500',
+      anthropicApiKey: null,
     })
   }
 }

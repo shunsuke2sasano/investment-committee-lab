@@ -1,19 +1,57 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { T, Button, VerdictBadge, PageLayout, hexRgb } from '../components/common/ui'
 import { useStore } from '../state/store'
-import { companyRepository, exportImport } from '../db/repositories'
-import type { CompanyCase } from '../types/domain'
+import { companyRepository, exportImport, monitoringRepository, verdictRepository } from '../db/repositories'
+import type { CompanyCase, VerdictResult } from '../types/domain'
 import { t } from '../lib/i18n'
 
 const STATUS_COLOR: Record<string, string> = {
   draft: T.textDim, active: T.cyan, archived: T.slate,
 }
 
+function ThesisAlarmBadge({ status, lang }: { status: 'warning' | 'broken'; lang: ReturnType<typeof useStore>['lang'] }) {
+  const color = status === 'broken' ? T.red : T.yellow
+  const label = status === 'broken' ? t('thesisBroken', lang) : t('thesisAtRisk', lang)
+  return (
+    <span style={{
+      color,
+      border: `1px solid ${color}`,
+      background: `rgba(${hexRgb(color)},0.1)`,
+      fontSize: 8, letterSpacing: 1, padding: '1px 5px',
+      fontFamily: "'Courier New',monospace", whiteSpace: 'nowrap',
+    }}>
+      {label}
+    </span>
+  )
+}
+
 export default function CompanyList() {
   const navigate = useNavigate()
   const { companies, setCompanies, removeCompany, showToast, lang } = useStore()
   const [search, setSearch] = React.useState('')
+  const [alarmMap, setAlarmMap] = useState<Map<string, 'warning' | 'broken'>>(new Map())
+  const [verdictMap, setVerdictMap] = useState<Map<string, VerdictResult>>(new Map())
+
+  useEffect(() => {
+    if (companies.length === 0) return
+    Promise.all([
+      monitoringRepository.listAll(),
+      verdictRepository.listLatestAll(),
+    ]).then(([plans, latestVerdicts]) => {
+      const alarms = new Map<string, 'warning' | 'broken'>()
+      plans.forEach(p => {
+        if (p.thesisStatus === 'broken' || p.thesisStatus === 'warning') {
+          alarms.set(p.companyId, p.thesisStatus)
+        }
+      })
+      setAlarmMap(alarms)
+
+      const verdicts = new Map<string, VerdictResult>()
+      latestVerdicts.forEach((report, companyId) => verdicts.set(companyId, report.verdict))
+      setVerdictMap(verdicts)
+    })
+  }, [companies])
 
   const filtered = companies.filter(c =>
     c.ticker.toLowerCase().includes(search.toLowerCase()) ||
@@ -84,30 +122,39 @@ export default function CompanyList() {
         ) : (
           <div style={{ border: `1px solid ${T.borderDim}` }}>
             {/* Header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 120px 100px 80px 80px', padding: '10px 16px', borderBottom: `1px solid ${T.borderDim}`, background: T.surface }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr 120px 100px 80px 80px', padding: '10px 16px', borderBottom: `1px solid ${T.borderDim}`, background: T.surface }}>
               {['TICKER', 'COMPANY', 'SECTOR', 'STATUS', 'VERDICT', ''].map(h => (
                 <div key={h} style={{ color: T.textMid, fontSize: 9, letterSpacing: 3 }}>{h}</div>
               ))}
             </div>
             {/* Rows */}
-            {filtered.map(c => (
-              <div key={c.id}
-                style={{ display: 'grid', gridTemplateColumns: '100px 1fr 120px 100px 80px 80px', padding: '13px 16px', borderBottom: `1px solid ${T.borderDim}`, cursor: 'pointer', transition: 'background 0.15s' }}
-                onClick={() => navigate(`/companies/${c.id}`)}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = `rgba(${hexRgb(T.cyan)},0.04)` }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
-              >
-                <div style={{ color: T.cyan, fontWeight: 700, fontSize: 13 }}>{c.ticker}</div>
-                <div style={{ color: T.text, fontSize: 12 }}>{c.companyName}</div>
-                <div style={{ color: T.textDim, fontSize: 11 }}>{c.sector ?? '—'}</div>
-                <div style={{ color: STATUS_COLOR[c.status], fontSize: 10, letterSpacing: 2 }}>{c.status.toUpperCase()}</div>
-                <div>—</div>
-                <div onClick={e => { e.stopPropagation(); handleDelete(c) }}
-                  style={{ color: T.textDim, fontSize: 10, cursor: 'pointer', textAlign: 'right' }}>
-                  DEL
+            {filtered.map(c => {
+              const alarm = alarmMap.get(c.id)
+              const verdict = verdictMap.get(c.id)
+              return (
+                <div key={c.id}
+                  style={{ display: 'grid', gridTemplateColumns: '140px 1fr 120px 100px 80px 80px', padding: '13px 16px', borderBottom: `1px solid ${T.borderDim}`, cursor: 'pointer', transition: 'background 0.15s' }}
+                  onClick={() => navigate(`/companies/${c.id}`)}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = `rgba(${hexRgb(T.cyan)},0.04)` }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ color: T.cyan, fontWeight: 700, fontSize: 13 }}>{c.ticker}</span>
+                    {alarm && <ThesisAlarmBadge status={alarm} lang={lang} />}
+                  </div>
+                  <div style={{ color: T.text, fontSize: 12 }}>{c.companyName}</div>
+                  <div style={{ color: T.textDim, fontSize: 11 }}>{c.sector ?? '—'}</div>
+                  <div style={{ color: STATUS_COLOR[c.status], fontSize: 10, letterSpacing: 2 }}>{c.status.toUpperCase()}</div>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    {verdict ? <VerdictBadge verdict={verdict} /> : <span style={{ color: T.textMid, fontSize: 10 }}>—</span>}
+                  </div>
+                  <div onClick={e => { e.stopPropagation(); handleDelete(c) }}
+                    style={{ color: T.textDim, fontSize: 10, cursor: 'pointer', textAlign: 'right' }}>
+                    DEL
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </PageLayout>

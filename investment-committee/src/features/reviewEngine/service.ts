@@ -1,4 +1,5 @@
 import type { ThesisAnalysis, DataAnalysis, MarketAnalysis, ValuationReport, ReviewReport, ReviewRisk, ReviewMismatch } from '../types/domain'
+import { settingsRepository } from '../../db/repositories'
 
 // ── Payload ───────────────────────────────────────────────────────────────
 interface ReviewPayload {
@@ -122,10 +123,25 @@ CAGRゲート: ${v.cagrGate}`)
 }
 
 // ── API call ──────────────────────────────────────────────────────────────
+async function resolveApiKey(): Promise<string> {
+  const settings = await settingsRepository.get()
+  const dbKey = (settings.anthropicApiKey ?? '').trim()
+  if (dbKey) return dbKey
+  return (import.meta as any).env?.VITE_ANTHROPIC_API_KEY ?? ''
+}
+
 async function callClaude(system: string, user: string): Promise<string> {
+  const apiKey = await resolveApiKey()
+  if (!apiKey) throw new Error('APIキーが未設定です。Settings画面で設定してください。')
+
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 2000,

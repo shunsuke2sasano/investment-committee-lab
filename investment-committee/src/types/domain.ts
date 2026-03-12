@@ -372,4 +372,5 @@ export interface AppSettings {
   cagrGateMin: number                  // default 12
   defaultHorizonMonths: number         // default 36
   benchmarkLabel: string               // default 'S&P500'
+  anthropicApiKey: string | null       // user-provided key; takes priority over env
 }

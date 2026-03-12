@@ -74,6 +74,7 @@ export const translations = {
   thesisNotCreated: { en: 'No thesis yet — ', ja: 'Thesis未作成 — ' },
   createThesis: { en: 'Create →', ja: '作成する →' },
   analysisPipeline: { en: 'ANALYSIS PIPELINE', ja: '分析パイプライン' },
+  pipelineProgress: { en: '{done}/{total} lanes complete', ja: '{done}/{total} レーン完了' },
   backToCases: { en: '← CASES', ja: '← ケース一覧' },
   caseNotFound: { en: 'CASE NOT FOUND', ja: 'ケースが見つかりません' },
 
@@ -189,6 +190,12 @@ export const translations = {
   currentData: { en: 'CURRENT DATA', ja: '現在データ' },
   assumptions: { en: 'ASSUMPTIONS (BASE CASE)', ja: '前提条件（ベースケース）' },
   saveValuation: { en: 'SAVE VALUATION', ja: 'バリュエーションを保存' },
+  sensitivityTitle: { en: 'SENSITIVITY — CAGR vs Growth × Multiple', ja: '感応度分析 — CAGR vs 成長率 × マルチプル' },
+  sensitivityNoData: { en: 'Enter base assumptions to see sensitivity analysis', ja: '前提条件を入力すると感応度分析が表示されます' },
+  horizonAutoFilled: {
+    en: '← Thesis Horizon ({months}mo → {years}yr)',
+    ja: '← Thesis Horizonから自動入力（{months}ヶ月 → {years}年）',
+  },
 
   // ── Verdict ──────────────────────────────────────────────────────────────
   verdictTitle: { en: 'VERDICT DASHBOARD', ja: 'バーディクト' },
@@ -207,6 +214,11 @@ export const translations = {
   rationaleLabel: { en: 'RATIONALE', ja: '判断根拠' },
   rationaleInputLabel: { en: 'Why this verdict?', ja: '最終判断の根拠（なぜこのVerdictか）' },
   saveVerdict: { en: 'SAVE VERDICT', ja: 'バーディクトを保存' },
+  feedApplyAll: { en: 'APPLY ALL SUGGESTIONS', ja: '候補を一括適用' },
+  feedApply: { en: 'Apply', ja: '適用' },
+  feedFromDataLane: { en: '← Data Lane', ja: '← Data Lane' },
+  feedFromMarketLane: { en: '← Market Lane', ja: '← Market Lane' },
+  feedSuggested: { en: 'suggested {score}/5', ja: '提案 {score}/5' },
   vetoLabel: { en: 'VETO — ', ja: 'VETO — ' },
 
   // ── Axis labels ───────────────────────────────────────────────────────────
@@ -218,6 +230,9 @@ export const translations = {
   axis_marketExpectationGap:   { en: 'Market Expectation Gap',  ja: '市場期待ギャップ' },
   axis_executionRisk:          { en: 'Execution Risk',          ja: '実行リスク' },
   axis_governance:             { en: 'Governance',              ja: 'ガバナンス' },
+
+  thesisBroken: { en: '⚠ BROKEN', ja: '⚠ BROKEN' },
+  thesisAtRisk: { en: '⚠ AT RISK', ja: '⚠ AT RISK' },
 
   // ── Monitoring ────────────────────────────────────────────────────────────
   monitoringTitle: { en: 'MONITORING', ja: 'モニタリング' },
@@ -233,6 +248,10 @@ export const translations = {
   lessonsTitle: { en: 'LESSONS', ja: 'レッスン' },
   lessonLibraryTitle: { en: 'LESSON LIBRARY', ja: 'レッスンライブラリ' },
   newLesson: { en: '+ NEW LESSON', ja: '+ 新規レッスン' },
+  tabAllLessons: { en: 'ALL LESSONS', ja: '全レッスン' },
+  tabRuleLibrary: { en: 'RULE LIBRARY', ja: 'ルールライブラリ' },
+  noRules: { en: 'No validated rules yet — promote lessons to validated_rule', ja: '検証済みルールなし — Lessonをvalidated_ruleに昇格してください' },
+  ruleLabel: { en: 'RULE', ja: 'ルール' },
   processSeparation: { en: 'PROCESS / OUTCOME SEPARATION', ja: 'プロセス / 結果の分離' },
   processSeparationBody: {
     en: 'Record process and outcome separately. Avoid converting good-process-bad-outcome (unlucky) into a permanent rule.',
@@ -256,6 +275,16 @@ export const translations = {
   vsLabel: { en: 'vs', ja: 'vs' },
   rootCauseRequired: { en: 'Root Cause is required', ja: 'Root Causeは必須です' },
   lessonSaved: { en: 'Lesson recorded', ja: 'Lessonを記録しました' },
+
+  // ── API Key ───────────────────────────────────────────────────────────────
+  apiKeySection: { en: 'AI — ANTHROPIC API KEY', ja: 'AI — ANTHROPIC APIキー' },
+  apiKeyLabel: { en: 'API Key', ja: 'APIキー' },
+  apiKeyShow: { en: 'SHOW', ja: '表示' },
+  apiKeyHide: { en: 'HIDE', ja: '非表示' },
+  apiKeySetStatus: { en: '✓ API key configured', ja: '✓ APIキーが設定されています' },
+  apiKeyEnvNote: { en: '⚠ No DB key — using env.local as fallback', ja: '⚠ DBキー未設定 — .env.localをフォールバックとして使用中' },
+  apiKeyNotSetNote: { en: '✗ No API key — AI features unavailable', ja: '✗ APIキー未設定 — AI機能を使うにはAPIキーが必要です' },
+  apiKeyPlaceholder: { en: 'sk-ant-api03-...', ja: 'sk-ant-api03-...' },
 
   // ── Settings ──────────────────────────────────────────────────────────────
   settingsTitle: { en: 'SETTINGS', ja: '設定' },
