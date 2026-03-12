@@ -1,0 +1,64 @@
+import Dexie, { type Table } from 'dexie'
+import type {
+  CompanyCase,
+  ThesisAnalysis,
+  DataAnalysis,
+  MarketAnalysis,
+  ReviewReport,
+  ValuationReport,
+  VerdictReport,
+  MonitoringPlan,
+  LessonRecord,
+  MetricSnapshot,
+  AppSettings,
+} from '../types/domain'
+
+export class InvestmentCommitteeDB extends Dexie {
+  companies!: Table<CompanyCase>
+  thesis_analyses!: Table<ThesisAnalysis>
+  data_analyses!: Table<DataAnalysis>
+  market_analyses!: Table<MarketAnalysis>
+  review_reports!: Table<ReviewReport>
+  valuation_reports!: Table<ValuationReport>
+  verdict_reports!: Table<VerdictReport>
+  monitoring_plans!: Table<MonitoringPlan>
+  lesson_records!: Table<LessonRecord>
+  metric_snapshots!: Table<MetricSnapshot>
+  app_settings!: Table<AppSettings>
+
+  constructor() {
+    super('InvestmentCommitteeDB')
+
+    this.version(1).stores({
+      companies:         'id, ticker, status, updatedAt',
+      thesis_analyses:   'id, companyId, version, updatedAt',
+      data_analyses:     'id, companyId, computedAt',
+      market_analyses:   'id, companyId, computedAt',
+      review_reports:    'id, companyId, createdAt',
+      valuation_reports: 'id, companyId, createdAt',
+      verdict_reports:   'id, companyId, createdAt',
+      monitoring_plans:  'id, companyId, updatedAt',
+      lesson_records:    'id, companyId, ticker, phase, createdAt',
+      metric_snapshots:  'id, asOfDate',
+      app_settings:      'id',
+    })
+  }
+}
+
+export const db = new InvestmentCommitteeDB()
+
+// ── Default settings initializer ─────────────────────────────────────────
+export async function initDefaultSettings() {
+  const existing = await db.app_settings.get('default')
+  if (!existing) {
+    await db.app_settings.put({
+      id: 'default',
+      activeProfileId: 'standard',
+      encryptionEnabled: false,
+      lastBackupAt: null,
+      cagrGateMin: 12,
+      defaultHorizonMonths: 36,
+      benchmarkLabel: 'S&P500',
+    })
+  }
+}
