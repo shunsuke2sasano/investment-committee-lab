@@ -110,6 +110,7 @@ export default function LessonPage() {
       <PageLayout
         title={companyId ? 'LESSONS' : 'LESSON LIBRARY'}
         subtitle={company ? `${company.ticker} / LESSONS` : 'ALL CASES / LESSONS'}
+        backTo={companyId ? `/companies/${companyId}` : undefined}
         actions={
           activeTab === 'lessons'
             ? <Button onClick={() => setShowForm(!showForm)} accent={T.slate} size="sm">{showForm ? t('cancelBtn', lang) : t('newLesson', lang)}</Button>

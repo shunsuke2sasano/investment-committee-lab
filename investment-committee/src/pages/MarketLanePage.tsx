@@ -53,7 +53,7 @@ export default function MarketLanePage() {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto' }}>
-      <PageLayout title={t('marketTitle', lang)} subtitle={`${company?.ticker ?? ''} / MARKET`}>
+      <PageLayout title={t('marketTitle', lang)} subtitle={`${company?.ticker ?? ''} / MARKET`} backTo={`/companies/${companyId}`}>
         <div style={{ border: `1px solid ${T.green}22`, borderLeft: `2px solid ${T.green}`, padding: '12px 16px', marginBottom: 20, background: `rgba(${hexRgb(T.green)},0.03)` }}>
           <div style={{ color: T.green, fontSize: 9, letterSpacing: 4, marginBottom: 4 }}>EXPECTATION GAP</div>
           <div style={{ color: T.textDim, fontSize: 11, lineHeight: 1.7 }}>

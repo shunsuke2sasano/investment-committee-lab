@@ -22,6 +22,10 @@ interface UIState {
   activeProfile: VerdictProfile
   setActiveProfileId: (id: 'conservative' | 'standard' | 'aggressive') => void
 
+  // Encryption unlock state (key lives in cryptoContext.ts, not here)
+  isUnlocked: boolean
+  setUnlocked: (v: boolean) => void
+
   // Global loading / error
   globalLoading: boolean
   setGlobalLoading: (v: boolean) => void
@@ -59,6 +63,9 @@ export const useStore = create<UIState>((set, get) => ({
     activeProfile: VERDICT_PROFILES[id],
     settings: get().settings ? { ...get().settings!, activeProfileId: id } : null,
   }),
+
+  isUnlocked: false,
+  setUnlocked: (v) => set({ isUnlocked: v }),
 
   globalLoading: false,
   setGlobalLoading: (v) => set({ globalLoading: v }),

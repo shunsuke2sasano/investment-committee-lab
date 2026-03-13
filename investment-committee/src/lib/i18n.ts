@@ -18,6 +18,7 @@ export const translations = {
   // ── Nav ─────────────────────────────────────────────────────────────────
   nav_cases: { en: 'CASES', ja: 'ケース' },
   nav_lessons: { en: 'LESSONS', ja: 'レッスン' },
+  nav_metrics: { en: 'METRICS', ja: 'メトリクス' },
   nav_settings: { en: 'SETTINGS', ja: '設定' },
 
   // ── Company List ─────────────────────────────────────────────────────────
@@ -275,6 +276,67 @@ export const translations = {
   vsLabel: { en: 'vs', ja: 'vs' },
   rootCauseRequired: { en: 'Root Cause is required', ja: 'Root Causeは必須です' },
   lessonSaved: { en: 'Lesson recorded', ja: 'Lessonを記録しました' },
+
+  // ── Encryption ────────────────────────────────────────────────────────────
+  encryptionSection:      { en: 'ENCRYPTION',                     ja: '暗号化' },
+  encryptionStatus:       { en: 'Status',                         ja: 'ステータス' },
+  encryptionOnLabel:      { en: 'ENABLED — AES-GCM-256',          ja: '有効 — AES-GCM-256' },
+  encryptionOffLabel:     { en: 'DISABLED',                       ja: '無効' },
+  encryptionEnableBtn:    { en: 'ENABLE ENCRYPTION',              ja: '暗号化を有効にする' },
+  encryptionDisableBtn:   { en: 'DISABLE ENCRYPTION',             ja: '暗号化を無効にする' },
+  passphraseLabel:        { en: 'Passphrase',                     ja: 'パスフレーズ' },
+  passphraseConfirmLabel: { en: 'Confirm Passphrase',             ja: 'パスフレーズ（確認）' },
+  passphraseMinLen:       { en: 'Minimum 8 characters',           ja: '最低8文字' },
+  passphraseMismatch:     { en: 'Passphrases do not match',       ja: 'パスフレーズが一致しません' },
+  passphraseRequired:     { en: 'Passphrase is required',         ja: 'パスフレーズを入力してください' },
+  encryptionNote: {
+    en: 'Once enabled, new saves are encrypted with AES-GCM-256. Passphrase is kept in memory only — losing it makes data unrecoverable.',
+    ja: '有効にすると、新しい保存データはAES-GCM-256で暗号化されます。パスフレーズはメモリのみに保持されます。紛失するとデータは復元不能になります。',
+  },
+  encryptionDisableNote: {
+    en: 'Disabling encryption means new saves will be stored in plaintext. Existing encrypted records remain encrypted until re-saved.',
+    ja: '無効にすると、新しい保存データは平文で保存されます。既存の暗号化レコードは再保存されるまで暗号化されたままです。',
+  },
+  disableEncryptionDataWarning: {
+    en: '⚠ To change your passphrase: disable encryption → export data → re-enable with the new passphrase. Changing passphrase without disabling first will make all existing data unreadable.',
+    ja: '⚠ パスフレーズを変更する場合: 暗号化を無効化 → データをExport → 新しいパスフレーズで再有効化。この手順を踏まずにパスフレーズを変更すると全既存データが読めなくなります。',
+  },
+  disableEncryptionConfirmMsg: {
+    en: 'All encrypted records will be decrypted and stored as plaintext in IndexedDB. This cannot be undone. Continue?',
+    ja: '全ての暗号化レコードを復号し、IndexedDBに平文で保存します。この操作は取り消せません。続行しますか？',
+  },
+  disableEncryptionConfirmBtn: { en: 'CONFIRM — DISABLE ENCRYPTION', ja: '確認 — 暗号化を無効にする' },
+  decryptingData:              { en: 'Decrypting all records…',       ja: '全レコードを復号中…' },
+  encryptionEnabled_ok:   { en: '✓ Encryption enabled', ja: '✓ 暗号化有効' },
+  // ── Passphrase modal ───────────────────────────────────────────────────────
+  passphraseModalTitle:   { en: 'UNLOCK', ja: 'アンロック' },
+  passphraseModalBody:    { en: 'Encryption is enabled. Enter your passphrase to unlock the app.', ja: '暗号化が有効です。パスフレーズを入力してアプリをアンロックしてください。' },
+  passphraseUnlockBtn:    { en: 'UNLOCK', ja: 'アンロック' },
+  passphraseWrong:        { en: 'Incorrect passphrase', ja: 'パスフレーズが間違っています' },
+  decryptError:           { en: 'Some records failed to decrypt — verify your passphrase', ja: '一部データの復号に失敗しました — パスフレーズを確認してください' },
+
+  // ── Metrics ───────────────────────────────────────────────────────────────
+  metricsTitle:          { en: 'SYSTEM METRICS',          ja: 'システムメトリクス' },
+  metricsSubtitle:       { en: 'PERFORMANCE ANALYSIS',    ja: 'パフォーマンス分析' },
+  metricsEmpty:          { en: 'NO LESSONS YET — Add lessons to see metrics', ja: 'レッスンなし — レッスンを追加するとメトリクスが表示されます' },
+  metricsTotal:          { en: 'TOTAL LESSONS',           ja: '総レッスン数' },
+  metricsBuyHitRate:     { en: 'BUY HIT RATE',            ja: 'BUY ヒット率' },
+  metricsPassMissRate:   { en: 'PASS MISS RATE',          ja: 'PASS ミス率' },
+  metricsAvgConfidence:  { en: 'AVG CONFIDENCE',          ja: '平均確信度' },
+  metricsProcessScore:   { en: 'PROCESS SCORE',           ja: 'プロセススコア' },
+  metricsDistribution:   { en: 'DECISION QUALITY DISTRIBUTION', ja: '判断品質分布' },
+  metricsBasedOnN:       { en: 'Based on {n} lessons',    ja: '{n}件から集計' },
+  metricsNoBuyLessons:   { en: 'No BUY verdict lessons',  ja: 'BUY判定のLessonなし' },
+  metricsNoPassLessons:  { en: 'No PASS verdict lessons', ja: 'PASS判定のLessonなし' },
+  metricsGoodProcessRatio: { en: 'good process ratio',    ja: '良プロセスの割合' },
+  metricsNote: {
+    en: 'buyHitRate = good_outcome ratio among BUY-verdict lessons  ·  passMissRate = positive return ratio among PASS-verdict lessons (manually recorded)  ·  processScore = good_process ratio across all lessons',
+    ja: 'buyHitRate = BUY判定Lessonのうちgood_outcomeの割合  ·  passMissRate = PASS判定LessonのうちactualReturn > 0の割合（手動記録）  ·  processScore = 全Lessonのgood_process割合',
+  },
+  dq_good_process_good_outcome: { en: 'Good Process · Good Outcome', ja: '良プロセス・良結果' },
+  dq_good_process_bad_outcome:  { en: 'Good Process · Bad Outcome (unlucky)', ja: '良プロセス・悪結果（運）' },
+  dq_bad_process_good_outcome:  { en: 'Bad Process · Good Outcome (lucky)',   ja: '悪プロセス・良結果（運）' },
+  dq_bad_process_bad_outcome:   { en: 'Bad Process · Bad Outcome',  ja: '悪プロセス・悪結果' },
 
   // ── API Key ───────────────────────────────────────────────────────────────
   apiKeySection: { en: 'AI — ANTHROPIC API KEY', ja: 'AI — ANTHROPIC APIキー' },

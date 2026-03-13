@@ -61,6 +61,25 @@ export class InvestmentCommitteeDB extends Dexie {
         if (record.anthropicApiKey === undefined) record.anthropicApiKey = null
       })
     )
+
+    // v3: add encryptionVerifier to app_settings
+    this.version(3).stores({
+      companies:         'id, ticker, status, updatedAt',
+      thesis_analyses:   'id, companyId, version, updatedAt',
+      data_analyses:     'id, companyId, computedAt',
+      market_analyses:   'id, companyId, computedAt',
+      review_reports:    'id, companyId, createdAt',
+      valuation_reports: 'id, companyId, createdAt',
+      verdict_reports:   'id, companyId, createdAt',
+      monitoring_plans:  'id, companyId, updatedAt',
+      lesson_records:    'id, companyId, ticker, phase, createdAt',
+      metric_snapshots:  'id, asOfDate',
+      app_settings:      'id',
+    }).upgrade(tx =>
+      tx.table('app_settings').toCollection().modify(record => {
+        if (record.encryptionVerifier === undefined) record.encryptionVerifier = null
+      })
+    )
   }
 }
 
@@ -74,6 +93,7 @@ export async function initDefaultSettings() {
       id: 'default',
       activeProfileId: 'standard',
       encryptionEnabled: false,
+      encryptionVerifier: null,
       lastBackupAt: null,
       cagrGateMin: 12,
       defaultHorizonMonths: 36,

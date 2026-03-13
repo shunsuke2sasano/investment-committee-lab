@@ -66,7 +66,7 @@ export default function ValuationPage() {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto' }}>
-      <PageLayout title={t('valuationTitle', lang)} subtitle={`${company?.ticker ?? ''} / VALUATION`}>
+      <PageLayout title={t('valuationTitle', lang)} subtitle={`${company?.ticker ?? ''} / VALUATION`} backTo={`/companies/${companyId}`}>
         <div style={{ border: `1px solid ${T.amber}`, borderLeft: `2px solid ${T.amber}`, padding: '12px 16px', marginBottom: 20, background: `rgba(${hexRgb(T.amber)},0.04)` }}>
           <div style={{ color: T.amber, fontSize: 9, letterSpacing: 4, marginBottom: 4 }}>VALUATION GATE — Investment = Company × Price</div>
           <div style={{ color: T.textDim, fontSize: 11, lineHeight: 1.7 }}>

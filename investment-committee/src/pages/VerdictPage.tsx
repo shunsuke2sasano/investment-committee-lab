@@ -155,6 +155,7 @@ export default function VerdictPage() {
       <PageLayout
         title={t('verdictTitle', lang)}
         subtitle={`${company?.ticker ?? ''} / VERDICT`}
+        backTo={`/companies/${companyId}`}
         actions={<Button onClick={handleSave} loading={loading} accent={T.pink}>{t('saveVerdict', lang)}</Button>}
       >
         {/* Valuation gate warning */}

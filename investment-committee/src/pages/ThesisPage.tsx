@@ -172,7 +172,7 @@ export default function ThesisPage() {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto' }}>
-      <PageLayout title={t('thesisTitle', lang)} subtitle={`${company?.ticker ?? ''} / THESIS`}>
+      <PageLayout title={t('thesisTitle', lang)} subtitle={`${company?.ticker ?? ''} / THESIS`} backTo={`/companies/${companyId}`}>
 
         {/* Lane independence note */}
         <div style={{ border: `1px solid ${T.purple}22`, borderLeft: `2px solid ${T.purple}`, padding: '12px 16px', marginBottom: 20, background: `rgba(${hexRgb(T.purple)},0.04)` }}>

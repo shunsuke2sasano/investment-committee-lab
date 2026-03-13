@@ -368,6 +368,7 @@ export interface AppSettings {
   id: 'default'
   activeProfileId: 'conservative' | 'standard' | 'aggressive'
   encryptionEnabled: boolean
+  encryptionVerifier: string | null    // encrypt("ic-verified") — used to validate passphrase on startup
   lastBackupAt: string | null
   cagrGateMin: number                  // default 12
   defaultHorizonMonths: number         // default 36

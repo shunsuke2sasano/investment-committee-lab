@@ -94,6 +94,7 @@ export default function MonitoringPage() {
       <PageLayout
         title={t('monitoringTitle', lang)}
         subtitle={`${company?.ticker ?? ''} / MONITORING`}
+        backTo={`/companies/${companyId}`}
         actions={<Button onClick={handleSave} loading={loading} accent={T.sky}>SAVE</Button>}
       >
         {/* Thesis status */}

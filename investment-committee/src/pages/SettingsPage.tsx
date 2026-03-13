@@ -1,15 +1,28 @@
 import React from 'react'
 import { T, Button, Select, PageLayout, SectionHeader, hexRgb, NumericInput, Input, css } from '../components/common/ui'
 import { useStore } from '../state/store'
-import { settingsRepository, exportImport } from '../db/repositories'
+import { settingsRepository, exportImport, decryptAllAndStrip } from '../db/repositories'
 import { VERDICT_PROFILES } from '../types/domain'
 import { t } from '../lib/i18n'
 import type { Lang } from '../lib/i18n'
+import { deriveKey, encrypt as cryptoEncrypt } from '../lib/crypto'
+import { setActiveCryptoState } from '../lib/cryptoContext'
 
 export default function SettingsPage() {
-  const { settings, setSettings, setActiveProfileId, showToast, lang, setLang } = useStore()
+  const { settings, setSettings, setActiveProfileId, showToast, lang, setLang, setUnlocked } = useStore()
   const [loading, setLoading] = React.useState(false)
   const [showKey, setShowKey] = React.useState(false)
+
+  // Encryption enable form state
+  const [encPassphrase, setEncPassphrase]         = React.useState('')
+  const [encPassphraseConfirm, setEncPassphraseConfirm] = React.useState('')
+  const [encError, setEncError]                   = React.useState('')
+  const [encLoading, setEncLoading]               = React.useState(false)
+  const [showEncForm, setShowEncForm]             = React.useState(false)
+
+  // Encryption disable confirmation state
+  const [showDisableConfirm, setShowDisableConfirm] = React.useState(false)
+  const [disableLoading, setDisableLoading]         = React.useState(false)
 
   const envKey: string = (import.meta as any).env?.VITE_ANTHROPIC_API_KEY ?? ''
   const dbKey = settings?.anthropicApiKey ?? ''
@@ -26,6 +39,56 @@ export default function SettingsPage() {
       showToast(t('settingsSaved', lang), 'success')
     } catch { showToast(t('saveFailed', lang), 'error') }
     setLoading(false)
+  }
+
+  async function handleEnableEncryption() {
+    setEncError('')
+    if (!encPassphrase) { setEncError(t('passphraseRequired', lang)); return }
+    if (encPassphrase.length < 8) { setEncError(t('passphraseMinLen', lang)); return }
+    if (encPassphrase !== encPassphraseConfirm) { setEncError(t('passphraseMismatch', lang)); return }
+    setEncLoading(true)
+    try {
+      const key = await deriveKey(encPassphrase)
+      // Use random 32 bytes as plaintext — prevents known-plaintext precomputation
+      const randomBytes = crypto.getRandomValues(new Uint8Array(32))
+      const randomPlaintext = Array.from(randomBytes, b => b.toString(16).padStart(2, '0')).join('')
+      const verifier = await cryptoEncrypt(key, randomPlaintext)
+      const updated = await settingsRepository.update({
+        encryptionEnabled: true,
+        encryptionVerifier: verifier,
+      })
+      setSettings(updated)
+      setActiveCryptoState(key, true)
+      setUnlocked(true)
+      setShowEncForm(false)
+      setEncPassphrase('')
+      setEncPassphraseConfirm('')
+      showToast(t('encryptionEnabled_ok', lang), 'success')
+    } catch {
+      setEncError(t('saveFailed', lang))
+    }
+    setEncLoading(false)
+  }
+
+  async function handleDisableEncryption() {
+    setDisableLoading(true)
+    try {
+      // Step 1: decrypt all records while the key is still active
+      await decryptAllAndStrip()
+      // Step 2: update settings
+      const updated = await settingsRepository.update({
+        encryptionEnabled: false,
+        encryptionVerifier: null,
+      })
+      setSettings(updated)
+      // Step 3: release the key from memory
+      setActiveCryptoState(null, false)
+      setShowDisableConfirm(false)
+      showToast(t('encryptionDisabled', lang), 'success')
+    } catch {
+      showToast(t('saveFailed', lang), 'error')
+    }
+    setDisableLoading(false)
   }
 
   async function handleExport() {
@@ -108,6 +171,130 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* ── Encryption ───────────────────────────────────────────── */}
+          <SectionHeader label={t('encryptionSection', lang)} color={T.purple} />
+          <div style={{ marginBottom: 20 }}>
+            {/* Status row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
+              <div style={{
+                padding: '4px 14px', fontSize: 10, letterSpacing: 2, fontWeight: 700,
+                border: `1px solid ${settings.encryptionEnabled ? T.green : T.borderDim}`,
+                color: settings.encryptionEnabled ? T.green : T.textDim,
+                background: settings.encryptionEnabled ? `rgba(52,211,153,0.06)` : 'transparent',
+              }}>
+                {settings.encryptionEnabled ? t('encryptionOnLabel', lang) : t('encryptionOffLabel', lang)}
+              </div>
+            </div>
+
+            {/* Info note */}
+            <div style={{
+              borderLeft: `2px solid ${T.purple}`, padding: '8px 12px',
+              color: T.textDim, fontSize: 10, lineHeight: 1.8, marginBottom: 14,
+              background: `rgba(167,139,250,0.04)`,
+            }}>
+              {settings.encryptionEnabled
+                ? t('encryptionDisableNote', lang)
+                : t('encryptionNote', lang)}
+            </div>
+
+            {settings.encryptionEnabled ? (
+              <>
+                {/* Always-visible passphrase-change warning */}
+                <div style={{
+                  border: `1px solid ${T.red}44`,
+                  borderLeft: `3px solid ${T.red}`,
+                  padding: '10px 14px', marginBottom: 14,
+                  background: `rgba(248,113,113,0.04)`,
+                  color: T.red, fontSize: 10, lineHeight: 1.9,
+                  fontFamily: "'Courier New',monospace",
+                }}>
+                  {t('disableEncryptionDataWarning', lang)}
+                </div>
+
+                {!showDisableConfirm ? (
+                  <Button
+                    onClick={() => setShowDisableConfirm(true)}
+                    variant="ghost" accent={T.red} size="sm"
+                  >
+                    {t('encryptionDisableBtn', lang)}
+                  </Button>
+                ) : (
+                  <div style={{ border: `1px solid ${T.red}66`, padding: '16px 18px', background: '#0D0608' }}>
+                    <div style={{ color: T.red, fontSize: 10, lineHeight: 1.9, marginBottom: 14, fontFamily: "'Courier New',monospace" }}>
+                      {t('disableEncryptionConfirmMsg', lang)}
+                    </div>
+                    {disableLoading && (
+                      <div style={{ color: T.textDim, fontSize: 10, marginBottom: 10, fontFamily: "'Courier New',monospace" }}>
+                        {t('decryptingData', lang)}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <Button
+                        onClick={handleDisableEncryption}
+                        loading={disableLoading}
+                        variant="ghost" accent={T.red} size="sm"
+                      >
+                        {t('disableEncryptionConfirmBtn', lang)}
+                      </Button>
+                      <Button
+                        onClick={() => setShowDisableConfirm(false)}
+                        variant="ghost" accent={T.textDim} size="sm"
+                        disabled={disableLoading}
+                      >
+                        {t('cancelBtn', lang)}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {!showEncForm ? (
+                  <Button onClick={() => setShowEncForm(true)} accent={T.purple} size="sm">
+                    {t('encryptionEnableBtn', lang)}
+                  </Button>
+                ) : (
+                  <div style={{ border: `1px solid ${T.borderDim}`, padding: '16px 18px', background: '#080D12' }}>
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={css.label}>{t('passphraseLabel', lang)}</label>
+                      <input
+                        type="password"
+                        value={encPassphrase}
+                        onChange={e => setEncPassphrase(e.target.value)}
+                        placeholder={t('passphraseMinLen', lang)}
+                        style={{ ...css.input }}
+                        onFocus={e => { e.target.style.borderColor = T.purple }}
+                        onBlur={e => { e.target.style.borderColor = T.borderDim }}
+                      />
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={css.label}>{t('passphraseConfirmLabel', lang)}</label>
+                      <input
+                        type="password"
+                        value={encPassphraseConfirm}
+                        onChange={e => setEncPassphraseConfirm(e.target.value)}
+                        style={{ ...css.input }}
+                        onFocus={e => { e.target.style.borderColor = T.purple }}
+                        onBlur={e => { e.target.style.borderColor = T.borderDim }}
+                      />
+                    </div>
+                    {encError && (
+                      <div style={{ color: T.red, fontSize: 10, marginBottom: 10 }}>✗ {encError}</div>
+                    )}
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <Button onClick={handleEnableEncryption} loading={encLoading} accent={T.purple} size="sm">
+                        {t('encryptionEnableBtn', lang)}
+                      </Button>
+                      <Button onClick={() => { setShowEncForm(false); setEncError(''); setEncPassphrase(''); setEncPassphraseConfirm('') }} variant="ghost" accent={T.textDim} size="sm">
+                        {t('cancelBtn', lang)}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
           <SectionHeader label={t('verdictProfileSection', lang)} color={T.pink} />
           <Select label={t('defaultProfile', lang)} value={settings.activeProfileId}
             onChange={v => setSettings({ ...settings, activeProfileId: v as any })}
@@ -141,7 +328,7 @@ export default function SettingsPage() {
           <SectionHeader label={t('systemInfo', lang)} color={T.textDim} />
           <div style={{ color: T.textDim, fontSize: 10, lineHeight: 2 }}>
             <div>{t('storageInfo', lang)}</div>
-            <div>{settings.encryptionEnabled ? t('encryptionEnabled_', lang) : t('encryptionDisabled', lang)}</div>
+            <div>{settings.encryptionEnabled ? t('encryptionOnLabel', lang) : t('encryptionDisabled', lang)}</div>
             <div>{t('lastBackup', lang)} {settings.lastBackupAt?.slice(0, 16) ?? t('neverBackup', lang)}</div>
             <div style={{ marginTop: 8, color: T.borderDim }}>LOCAL ONLY — NO EXTERNAL TRANSMISSION</div>
           </div>

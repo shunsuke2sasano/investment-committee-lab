@@ -1,4 +1,5 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DESIGN TOKENS
@@ -287,14 +288,32 @@ export function hexRgb(hex: string): string {
 }
 
 // ── Page layout ───────────────────────────────────────────────────────────
-export function PageLayout({ children, title, subtitle, actions }: {
+export function PageLayout({ children, title, subtitle, actions, backTo }: {
   children: React.ReactNode
   title: string
   subtitle?: string
   actions?: React.ReactNode
+  backTo?: string
 }) {
+  const navigate = useNavigate()
   return (
     <div style={{ padding: '28px 36px', maxWidth: 960, margin: '0 auto' }}>
+      {backTo && (
+        <button
+          onClick={() => navigate(backTo)}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: T.textDim, fontSize: 11, letterSpacing: 2,
+            fontFamily: "'Courier New',monospace", padding: '0 0 16px 0',
+            display: 'flex', alignItems: 'center', gap: 6,
+            textTransform: 'uppercase',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.color = T.cyan)}
+          onMouseLeave={e => (e.currentTarget.style.color = T.textDim)}
+        >
+          ← Overview
+        </button>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
         <div>
           <div style={{ color: T.textDim, fontSize: 9, letterSpacing: 5, marginBottom: 4, fontFamily: "'Courier New',monospace" }}>{subtitle}</div>

@@ -52,7 +52,7 @@ export default function DataLanePage() {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto' }}>
-      <PageLayout title={t('dataTitle', lang)} subtitle={`${company?.ticker ?? ''} / DATA`}>
+      <PageLayout title={t('dataTitle', lang)} subtitle={`${company?.ticker ?? ''} / DATA`} backTo={`/companies/${companyId}`}>
         <div style={{ border: `1px solid ${T.yellow}22`, borderLeft: `2px solid ${T.yellow}`, padding: '12px 16px', marginBottom: 20, background: `rgba(${hexRgb(T.yellow)},0.03)` }}>
           <div style={{ color: T.yellow, fontSize: 9, letterSpacing: 4, marginBottom: 4 }}>{t('dataLaneNoteTitle', lang)}</div>
           <div style={{ color: T.textDim, fontSize: 11, lineHeight: 1.7 }}>

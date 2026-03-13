@@ -89,6 +89,7 @@ export default function ReviewPage() {
       <PageLayout
         title={t('reviewTitle', lang)}
         subtitle={`${company?.ticker ?? ''} / STRUCTURED REVIEWER`}
+        backTo={`/companies/${companyId}`}
         actions={
           <Button onClick={handleRun} loading={loading} accent={T.red}>
             {report ? t('reRunReview', lang) : t('runReview', lang)}
