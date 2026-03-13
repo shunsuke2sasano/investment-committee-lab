@@ -4,10 +4,11 @@ import { T, Input, NumericInput, Select, Button, PageLayout, SectionHeader } fro
 import { useStore } from '../state/store'
 import { t } from '../lib/i18n'
 import { companyRepository } from '../db/repositories'
+import { isJapaneseStock, fetchFmpProfile } from '../lib/fmpClient'
 
 export default function CompanyNew() {
   const navigate = useNavigate()
-  const { upsertCompany, showToast, lang } = useStore()
+  const { upsertCompany, showToast, lang, settings } = useStore()
   const [form, setForm] = useState({
     ticker: '', companyName: '', sector: '',
     currentPrice: null as number | null,
@@ -17,6 +18,32 @@ export default function CompanyNew() {
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
+  const [fmpLoading, setFmpLoading] = useState(false)
+
+  const fmpKey = settings?.fmpApiKey ?? ''
+  const hasFmpKey = fmpKey.trim().length > 0
+
+  async function handleFmpFetch() {
+    const ticker = form.ticker.trim().toUpperCase()
+    if (!ticker) return
+    if (isJapaneseStock(ticker)) { showToast(t('fmpJpSkip', lang), 'error'); return }
+    setFmpLoading(true)
+    try {
+      const profile = await fetchFmpProfile(ticker, fmpKey)
+      setForm(f => ({
+        ...f,
+        companyName: profile.companyName ?? f.companyName,
+        sector: profile.sector ?? f.sector,
+        currentPrice: profile.price ?? f.currentPrice,
+        marketCap: profile.mktCap ?? f.marketCap,
+        enterpriseValue: profile.enterpriseValue ?? f.enterpriseValue,
+      }))
+      showToast(t('fmpFetchSuccess', lang), 'success')
+    } catch {
+      showToast(t('fmpFetchError', lang), 'error')
+    }
+    setFmpLoading(false)
+  }
 
   function validate() {
     const e: Record<string, string> = {}
@@ -63,6 +90,36 @@ export default function CompanyNew() {
         <div style={{ maxWidth: 600 }}>
           {/* @ts-ignore */}<SectionHeader label={t("identification", lang)} color={T.cyan} />
           <Input label={t('tickerLabel', lang)} value={form.ticker} onChange={v => setForm(f => ({ ...f, ticker: v.toUpperCase() }))} error={errors.ticker} placeholder="NVDA" accent={T.cyan} />
+
+          {/* FMP fetch button — shown after ticker is entered */}
+          {form.ticker.trim().length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <button
+                type="button"
+                onClick={hasFmpKey ? handleFmpFetch : undefined}
+                disabled={!hasFmpKey || fmpLoading}
+                title={hasFmpKey ? undefined : t('fmpKeyMissing', lang)}
+                style={{
+                  padding: '7px 16px', cursor: hasFmpKey ? 'pointer' : 'not-allowed',
+                  background: 'transparent',
+                  border: `1px solid ${hasFmpKey ? T.green : T.borderDim}`,
+                  color: hasFmpKey ? T.green : T.textDim,
+                  fontFamily: "'Courier New', monospace",
+                  fontSize: 9, letterSpacing: 2,
+                  opacity: hasFmpKey ? 1 : 0.5,
+                  transition: 'all 0.15s',
+                }}
+              >
+                {fmpLoading ? t('fmpFetching', lang) : t('fmpFetchBtn', lang)}
+              </button>
+              {!hasFmpKey && (
+                <span style={{ color: T.textDim, fontSize: 10, marginLeft: 10 }}>
+                  {t('fmpKeyMissing', lang)}
+                </span>
+              )}
+            </div>
+          )}
+
           <Input label={t('companyNameLabel', lang)} value={form.companyName} onChange={v => setForm(f => ({ ...f, companyName: v }))} error={errors.companyName} placeholder="NVIDIA Corporation" accent={T.cyan} />
           <Select label={t('sectorLabel', lang)} value={form.sector} onChange={v => setForm(f => ({ ...f, sector: v }))}
             options={SECTORS.map(s => ({ value: s, label: s || t('sectorSelect', lang) }))} />

@@ -6,9 +6,11 @@ import {
   thesisRepository, verdictRepository,
   dataAnalysisRepository, marketAnalysisRepository,
   reviewRepository, valuationRepository, monitoringRepository,
+  companyRepository,
 } from '../db/repositories'
 import { t } from '../lib/i18n'
 import type { ThesisAnalysis, VerdictReport, ThesisStatus } from '../types/domain'
+import { isJapaneseStock, fetchFmpProfile } from '../lib/fmpClient'
 
 // Pipeline lanes that get completion badges (excludes Monitoring / Lessons)
 const PIPELINE_KEYS = ['thesis', 'data', 'market', 'review', 'valuation', 'verdict'] as const
@@ -19,7 +21,29 @@ export default function CompanyDetail() {
   const navigate = useNavigate()
   const companies = useStore(s => s.companies)
   const lang = useStore(s => s.lang)
+  const { settings, upsertCompany, showToast } = useStore()
   const company = companies.find(c => c.id === id)
+  const [priceLoading, setPriceLoading] = useState(false)
+
+  const fmpKey = settings?.fmpApiKey ?? ''
+  const hasFmpKey = fmpKey.trim().length > 0
+
+  async function handleUpdatePrice() {
+    if (!company) return
+    if (isJapaneseStock(company.ticker)) { showToast(t('fmpJpSkip', lang), 'error'); return }
+    setPriceLoading(true)
+    try {
+      const profile = await fetchFmpProfile(company.ticker, fmpKey)
+      if (profile.price != null) {
+        const updated = await companyRepository.update(company.id, { currentPrice: profile.price })
+        if (updated) upsertCompany(updated)
+        showToast(t('fmpFetchSuccess', lang), 'success')
+      }
+    } catch {
+      showToast(t('fmpFetchError', lang), 'error')
+    }
+    setPriceLoading(false)
+  }
 
   const [thesis, setThesis] = useState<ThesisAnalysis | null>(null)
   const [verdict, setVerdict] = useState<VerdictReport | null>(null)
@@ -168,7 +192,27 @@ export default function CompanyDetail() {
             <div style={{ border: `1px solid ${T.borderDim}`, padding: '16px 20px', background: '#080D12' }}>
               <SectionHeader label={t('companyInfo', lang)} color={T.cyan} />
               <InfoRow label="Sector" value={company.sector ?? '—'} />
-              <InfoRow label="Price" value={company.currentPrice ? `$${company.currentPrice}` : '—'} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                <InfoRow label="Price" value={company.currentPrice ? `$${company.currentPrice}` : '—'} />
+                <button
+                  type="button"
+                  onClick={hasFmpKey ? handleUpdatePrice : undefined}
+                  disabled={!hasFmpKey || priceLoading || isJapaneseStock(company.ticker)}
+                  title={hasFmpKey ? t('fmpUpdatePriceBtn', lang) : t('fmpKeyMissing', lang)}
+                  style={{
+                    padding: '3px 10px', cursor: hasFmpKey ? 'pointer' : 'not-allowed',
+                    background: 'transparent',
+                    border: `1px solid ${hasFmpKey ? T.green : T.borderDim}`,
+                    color: hasFmpKey ? T.green : T.textDim,
+                    fontFamily: "'Courier New', monospace",
+                    fontSize: 8, letterSpacing: 1,
+                    opacity: hasFmpKey ? 1 : 0.4,
+                    flexShrink: 0,
+                  }}
+                >
+                  {priceLoading ? '…' : t('fmpUpdatePriceBtn', lang)}
+                </button>
+              </div>
               <InfoRow label="Mkt Cap" value={company.marketCap ? `$${(company.marketCap / 1000).toFixed(1)}B` : '—'} />
               <InfoRow label="EV" value={company.enterpriseValue ? `$${(company.enterpriseValue / 1000).toFixed(1)}B` : '—'} />
               <InfoRow label="Horizon" value={`${company.investmentHorizonMonths}mo`} />

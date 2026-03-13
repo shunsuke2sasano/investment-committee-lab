@@ -374,4 +374,5 @@ export interface AppSettings {
   defaultHorizonMonths: number         // default 36
   benchmarkLabel: string               // default 'S&P500'
   anthropicApiKey: string | null       // user-provided key; takes priority over env
+  fmpApiKey: string | null             // Financial Modeling Prep API key
 }

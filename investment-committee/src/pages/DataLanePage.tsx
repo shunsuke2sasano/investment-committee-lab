@@ -6,6 +6,7 @@ import { t } from '../lib/i18n'
 import { dataAnalysisRepository } from '../db/repositories'
 import { calculateDataScores, buildDataSummary } from '../lib/calculators'
 import type { DataLaneInput, DataAnalysis } from '../types/domain'
+import { isJapaneseStock, fetchFmpFinancials } from '../lib/fmpClient'
 
 const EMPTY_INPUT: DataLaneInput = {
   revenueGrowthYoy: null, revenueGrowth3y: null,
@@ -18,10 +19,39 @@ export default function DataLanePage() {
   const { id: companyId } = useParams<{ id: string }>()
   const companies = useStore(s => s.companies)
   const company = companies.find(c => c.id === companyId)
-  const { showToast, lang } = useStore()
+  const { showToast, lang, settings } = useStore()
   const [input, setInput] = useState<DataLaneInput>(EMPTY_INPUT)
   const [saved, setSaved] = useState<DataAnalysis | null>(null)
   const [loading, setLoading] = useState(false)
+  const [fmpLoading, setFmpLoading] = useState(false)
+
+  const fmpKey = settings?.fmpApiKey ?? ''
+  const hasFmpKey = fmpKey.trim().length > 0
+
+  async function handleFmpFetch() {
+    const ticker = company?.ticker ?? ''
+    if (!ticker) return
+    if (isJapaneseStock(ticker)) { showToast(t('fmpJpSkip', lang), 'error'); return }
+    setFmpLoading(true)
+    try {
+      const data = await fetchFmpFinancials(ticker, fmpKey)
+      setInput(prev => ({
+        ...prev,
+        revenueGrowthYoy: data.revenueGrowthYoy ?? prev.revenueGrowthYoy,
+        revenueGrowth3y:  data.revenueGrowth3y  ?? prev.revenueGrowth3y,
+        grossMargin:      data.grossMargin       ?? prev.grossMargin,
+        operatingMargin:  data.operatingMargin   ?? prev.operatingMargin,
+        fcfMargin:        data.fcfMargin         ?? prev.fcfMargin,
+        roic:             data.roic              ?? prev.roic,
+        debtToEbitda:     data.debtToEbitda      ?? prev.debtToEbitda,
+        currentRatio:     data.currentRatio      ?? prev.currentRatio,
+      }))
+      showToast(t('fmpFetchSuccess', lang), 'success')
+    } catch {
+      showToast(t('fmpFetchError', lang), 'error')
+    }
+    setFmpLoading(false)
+  }
 
   useEffect(() => {
     if (!companyId) return
@@ -100,8 +130,29 @@ export default function DataLanePage() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+        <div style={{ display: 'flex', gap: 12, marginTop: 24, alignItems: 'center', flexWrap: 'wrap' }}>
           <Button onClick={handleSave} loading={loading} accent={T.yellow}>{t('saveDataLane', lang)}</Button>
+          <button
+            type="button"
+            onClick={hasFmpKey ? handleFmpFetch : undefined}
+            disabled={!hasFmpKey || fmpLoading}
+            title={hasFmpKey ? undefined : t('fmpKeyMissing', lang)}
+            style={{
+              padding: '9px 18px', cursor: hasFmpKey ? 'pointer' : 'not-allowed',
+              background: 'transparent',
+              border: `1px solid ${hasFmpKey ? T.green : T.borderDim}`,
+              color: hasFmpKey ? T.green : T.textDim,
+              fontFamily: "'Courier New', monospace",
+              fontSize: 9, letterSpacing: 2,
+              opacity: hasFmpKey ? 1 : 0.5,
+              transition: 'all 0.15s',
+            }}
+          >
+            {fmpLoading ? t('fmpFetching', lang) : t('fmpFetchBtn', lang)}
+          </button>
+          {!hasFmpKey && (
+            <span style={{ color: T.textDim, fontSize: 10 }}>{t('fmpKeyMissing', lang)}</span>
+          )}
         </div>
         {saved && <div style={{ color: T.textDim, fontSize: 10, marginTop: 8 }}>Last saved: {saved.computedAt.slice(0, 16)}</div>}
       </PageLayout>

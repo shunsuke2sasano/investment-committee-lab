@@ -338,6 +338,20 @@ export const translations = {
   dq_bad_process_good_outcome:  { en: 'Bad Process · Good Outcome (lucky)',   ja: '悪プロセス・良結果（運）' },
   dq_bad_process_bad_outcome:   { en: 'Bad Process · Bad Outcome',  ja: '悪プロセス・悪結果' },
 
+  // ── FMP API ───────────────────────────────────────────────────────────────
+  fmpApiSection:      { en: 'MARKET DATA — FMP API KEY',                ja: '市場データ — FMP APIキー' },
+  fmpApiLabel:        { en: 'FMP API Key',                              ja: 'FMP APIキー' },
+  fmpApiPlaceholder:  { en: 'your-fmp-api-key',                         ja: 'your-fmp-api-key' },
+  fmpApiSetStatus:    { en: '✓ FMP API key configured',                 ja: '✓ FMP APIキーが設定されています' },
+  fmpApiNotSetNote:   { en: '✗ No FMP key — market data fetch unavailable', ja: '✗ FMP APIキー未設定 — 市場データ取得には設定が必要です' },
+  fmpFetchBtn:        { en: 'FETCH FROM FMP',                           ja: 'FMPから取得' },
+  fmpUpdatePriceBtn:  { en: 'UPDATE PRICE',                             ja: '株価更新' },
+  fmpKeyMissing:      { en: 'Set FMP API key in Settings first',        ja: 'SettingsでFMP APIキーを先に設定してください' },
+  fmpJpSkip:          { en: 'Japanese stocks are not supported by FMP integration', ja: '日本株はFMP連携に対応していません' },
+  fmpFetchSuccess:    { en: 'Data fetched from FMP',                    ja: 'FMPからデータを取得しました' },
+  fmpFetchError:      { en: 'FMP fetch failed',                         ja: 'FMPからのデータ取得に失敗しました' },
+  fmpFetching:        { en: 'Fetching…',                                ja: '取得中…' },
+
   // ── API Key ───────────────────────────────────────────────────────────────
   apiKeySection: { en: 'AI — ANTHROPIC API KEY', ja: 'AI — ANTHROPIC APIキー' },
   apiKeyLabel: { en: 'API Key', ja: 'APIキー' },

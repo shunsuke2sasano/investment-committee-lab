@@ -12,6 +12,7 @@ export default function SettingsPage() {
   const { settings, setSettings, setActiveProfileId, showToast, lang, setLang, setUnlocked } = useStore()
   const [loading, setLoading] = React.useState(false)
   const [showKey, setShowKey] = React.useState(false)
+  const [showFmpKey, setShowFmpKey] = React.useState(false)
 
   // Encryption enable form state
   const [encPassphrase, setEncPassphrase]         = React.useState('')
@@ -167,6 +168,50 @@ export default function SettingsPage() {
                 <span style={{ color: T.yellow }}>{t('apiKeyEnvNote', lang)}</span>
               ) : (
                 <span style={{ color: T.red }}>{t('apiKeyNotSetNote', lang)}</span>
+              )}
+            </div>
+          </div>
+
+          {/* ── FMP API Key ───────────────────────────────────────────── */}
+          <SectionHeader label={t('fmpApiSection', lang)} color={T.green} />
+          <div style={{ marginBottom: 14 }}>
+            <label style={css.label}>{t('fmpApiLabel', lang)}</label>
+            <div style={{ display: 'flex' }}>
+              <input
+                type={showFmpKey ? 'text' : 'password'}
+                value={settings?.fmpApiKey ?? ''}
+                placeholder={t('fmpApiPlaceholder', lang)}
+                onChange={e => settings && setSettings({ ...settings, fmpApiKey: e.target.value || null })}
+                style={{
+                  ...css.input, flex: 1,
+                  borderRight: 'none',
+                  fontFamily: showFmpKey ? "'Courier New', monospace" : 'monospace',
+                  letterSpacing: showFmpKey ? 'normal' : '0.15em',
+                }}
+                onFocus={e => { e.target.style.borderColor = T.green }}
+                onBlur={e => { e.target.style.borderColor = T.borderDim }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowFmpKey(s => !s)}
+                style={{
+                  padding: '9px 14px', cursor: 'pointer',
+                  background: '#080D12',
+                  border: `1px solid ${T.borderDim}`,
+                  color: T.textDim,
+                  fontFamily: "'Courier New', monospace",
+                  fontSize: 9, letterSpacing: 2,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {showFmpKey ? t('apiKeyHide', lang) : t('apiKeyShow', lang)}
+              </button>
+            </div>
+            <div style={{ marginTop: 6, fontSize: 10 }}>
+              {(settings?.fmpApiKey ?? '').trim().length > 0 ? (
+                <span style={{ color: T.green }}>{t('fmpApiSetStatus', lang)}</span>
+              ) : (
+                <span style={{ color: T.textDim }}>{t('fmpApiNotSetNote', lang)}</span>
               )}
             </div>
           </div>

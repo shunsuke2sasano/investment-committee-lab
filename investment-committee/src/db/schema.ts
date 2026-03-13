@@ -80,6 +80,25 @@ export class InvestmentCommitteeDB extends Dexie {
         if (record.encryptionVerifier === undefined) record.encryptionVerifier = null
       })
     )
+
+    // v4: add fmpApiKey to app_settings
+    this.version(4).stores({
+      companies:         'id, ticker, status, updatedAt',
+      thesis_analyses:   'id, companyId, version, updatedAt',
+      data_analyses:     'id, companyId, computedAt',
+      market_analyses:   'id, companyId, computedAt',
+      review_reports:    'id, companyId, createdAt',
+      valuation_reports: 'id, companyId, createdAt',
+      verdict_reports:   'id, companyId, createdAt',
+      monitoring_plans:  'id, companyId, updatedAt',
+      lesson_records:    'id, companyId, ticker, phase, createdAt',
+      metric_snapshots:  'id, asOfDate',
+      app_settings:      'id',
+    }).upgrade(tx =>
+      tx.table('app_settings').toCollection().modify(record => {
+        if (record.fmpApiKey === undefined) record.fmpApiKey = null
+      })
+    )
   }
 }
 
@@ -99,6 +118,7 @@ export async function initDefaultSettings() {
       defaultHorizonMonths: 36,
       benchmarkLabel: 'S&P500',
       anthropicApiKey: null,
+      fmpApiKey: null,
     })
   }
 }
