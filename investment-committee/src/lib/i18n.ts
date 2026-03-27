@@ -401,6 +401,17 @@ export const translations = {
   langLabel: { en: 'Display Language', ja: '表示言語' },
   settingsSaved: { en: 'Settings saved', ja: '設定を保存しました' },
   backupDone: { en: 'Backup complete', ja: 'バックアップ完了' },
+
+  // ── CSV Import / Export ────────────────────────────────────────────────────
+  csvImportBtn:      { en: 'IMPORT CSV',              ja: 'CSVインポート' },
+  csvExportBtn:      { en: 'EXPORT CSV',              ja: 'CSVエクスポート' },
+  csvTemplateBtn:    { en: 'TEMPLATE CSV',            ja: 'テンプレートCSV' },
+  csvPreviewTitle:   { en: 'CSV PREVIEW',             ja: 'CSVプレビュー' },
+  csvApplyBtn:       { en: 'APPLY',                   ja: '適用' },
+  csvImportSuccess:  { en: '{n} period(s) imported',  ja: '{n}期間をインポートしました' },
+  csvNoData:         { en: 'No valid data rows found', ja: '有効なデータ行が見つかりませんでした' },
+  csvInvalidFormat:  { en: 'Invalid CSV',             ja: '不正なCSVフォーマット' },
+  csvRowsSkipped:    { en: '{n} row(s) skipped',      ja: '{n}行をスキップしました' },
 } as const
 
 export type TranslationKey = keyof typeof translations

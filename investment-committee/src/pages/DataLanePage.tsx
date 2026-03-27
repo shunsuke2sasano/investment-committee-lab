@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { T, NumericInput, Button, PageLayout, SectionHeader, ScoreBadge, Select, hexRgb } from '../components/common/ui'
 import { useStore } from '../state/store'
@@ -7,6 +7,8 @@ import { dataAnalysisRepository } from '../db/repositories'
 import { calculateDataScores, buildDataSummary, calculateYoY, detectTrend } from '../lib/calculators'
 import type { DataLaneInput, DataAnalysis, FiscalPeriodData } from '../types/domain'
 import { isJapaneseStock, fetchFmpFinancials } from '../lib/fmpClient'
+import { parseCSV, mergePeriodsCSV, exportToCSV, generateTemplate, downloadCSV, CSV_COLUMNS } from '../lib/csvParser'
+import type { SkippedRow } from '../lib/csvParser'
 import {
   INDUSTRY_PRESETS, PRESET_LIST, inferPresetFromSector,
   getFieldLabel, FIELD_UNITS, FIELD_PLACEHOLDERS,
@@ -164,6 +166,103 @@ function PresetFormGroup({ group, preset, activeInput, prevInput, lang, updPerio
   )
 }
 
+// ── CSV Preview Panel ──────────────────────────────────────────────────────
+function CsvPreviewPanel({ preview, skipped, lang, onApply, onCancel }: {
+  preview: FiscalPeriodData[]
+  skipped: SkippedRow[]
+  lang: 'en' | 'ja'
+  onApply: () => void
+  onCancel: () => void
+}) {
+  const visibleCols = CSV_COLUMNS.filter(({ field }) =>
+    preview.some(p => p.input[field] !== null),
+  )
+  return (
+    <div style={{
+      marginTop: 20,
+      border: `1px solid ${T.cyan}44`,
+      borderLeft: `2px solid ${T.cyan}`,
+      background: `rgba(${hexRgb(T.cyan)},0.04)`,
+      padding: '14px 16px',
+    }}>
+      <div style={{ color: T.cyan, fontSize: 9, letterSpacing: 4, marginBottom: 10, textTransform: 'uppercase' }}>
+        {t('csvPreviewTitle', lang)} — {preview.length} period{preview.length !== 1 ? 's' : ''}
+      </div>
+
+      {skipped.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          {skipped.map((s, i) => (
+            <div key={i} style={{ color: T.red, fontSize: 9, fontFamily: "'Courier New', monospace", marginBottom: 2 }}>
+              ⚠ Row {s.rowNum}: {s.reason}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ overflowX: 'auto', marginBottom: 12 }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: 10, fontFamily: "'Courier New', monospace", whiteSpace: 'nowrap' }}>
+          <thead>
+            <tr>
+              <th style={{ color: T.textDim, padding: '4px 10px', textAlign: 'left', borderBottom: `1px solid ${T.borderDim}`, fontSize: 9, letterSpacing: 1 }}>
+                fiscalYear
+              </th>
+              {visibleCols.map(({ header }) => (
+                <th key={header} style={{ color: T.textDim, padding: '4px 10px', textAlign: 'right', borderBottom: `1px solid ${T.borderDim}`, fontSize: 9, letterSpacing: 1 }}>
+                  {header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {preview.map((p, i) => (
+              <tr key={i}>
+                <td style={{ color: T.yellow, padding: '4px 10px', borderBottom: `1px solid ${T.borderDim}22` }}>
+                  {p.fiscalYear}
+                </td>
+                {visibleCols.map(({ field }) => {
+                  const v = p.input[field]
+                  return (
+                    <td key={field} style={{ color: v !== null ? T.text : T.textDim, padding: '4px 10px', textAlign: 'right', borderBottom: `1px solid ${T.borderDim}22` }}>
+                      {v !== null ? v.toFixed(1) : '—'}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button
+          type="button"
+          onClick={onApply}
+          style={{
+            padding: '8px 18px', cursor: 'pointer',
+            background: `rgba(${hexRgb(T.cyan)},0.1)`,
+            border: `1px solid ${T.cyan}`,
+            color: T.cyan,
+            fontFamily: "'Courier New', monospace", fontSize: 9, letterSpacing: 2,
+          }}
+        >
+          {t('csvApplyBtn', lang)}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          style={{
+            padding: '8px 18px', cursor: 'pointer', background: 'transparent',
+            border: `1px solid ${T.borderDim}`, color: T.textDim,
+            fontFamily: "'Courier New', monospace", fontSize: 9, letterSpacing: 2,
+          }}
+        >
+          {t('cancelBtn', lang)}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 
 export default function DataLanePage() {
@@ -182,6 +281,8 @@ export default function DataLanePage() {
   const [editingYearIdx, setEditingYearIdx] = useState<number | null>(null)
   const [presetId, setPresetId] = useState<PresetId>('generic')
   const [presetAutoSet, setPresetAutoSet] = useState(false)
+  const [csvPreview, setCsvPreview] = useState<ReturnType<typeof parseCSV> | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fmpKey    = settings?.fmpApiKey ?? ''
   const hasFmpKey = fmpKey.trim().length > 0
@@ -294,6 +395,44 @@ export default function DataLanePage() {
       showToast('Data Lane saved', 'success')
     } catch { showToast(t('saveFailed', lang), 'error') }
     setLoading(false)
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    const text = await file.text()
+    const result = parseCSV(text)
+    if (result.error) {
+      showToast(`${t('csvInvalidFormat', lang)}: ${result.error}`, 'error')
+      return
+    }
+    if (result.rows.length === 0) {
+      showToast(t('csvNoData', lang), 'error')
+      return
+    }
+    setCsvPreview(result)
+  }
+
+  function handleApplyCSV() {
+    if (!csvPreview) return
+    const merged = mergePeriodsCSV(periods, csvPreview.rows)
+    setPeriods(merged)
+    setActivePeriodIdx(0)
+    setCsvPreview(null)
+    showToast(t('csvImportSuccess', lang, { n: csvPreview.rows.length }), 'success')
+    if (csvPreview.skipped.length > 0) {
+      showToast(t('csvRowsSkipped', lang, { n: csvPreview.skipped.length }), 'error')
+    }
+  }
+
+  function handleExportCSV() {
+    const ticker = company?.ticker ?? 'data'
+    downloadCSV(exportToCSV(periods), `${ticker}_financials.csv`)
+  }
+
+  function handleDownloadTemplate() {
+    downloadCSV(generateTemplate(), 'financials_template.csv')
   }
 
   const scoreColor = (s: number) => s >= 4 ? T.green : s >= 3 ? T.yellow : T.red
@@ -509,6 +648,13 @@ export default function DataLanePage() {
         </div>
 
         {/* ── Actions ──────────────────────────────────────────────────────── */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          style={{ display: 'none' }}
+          onChange={handleFileChange}
+        />
         <div style={{ display: 'flex', gap: 12, marginTop: 24, alignItems: 'center', flexWrap: 'wrap' }}>
           <Button onClick={handleSave} loading={loading} accent={T.yellow}>{t('saveDataLane', lang)}</Button>
           <button
@@ -530,6 +676,45 @@ export default function DataLanePage() {
           {!hasFmpKey && (
             <span style={{ color: T.textDim, fontSize: 10 }}>{t('fmpKeyMissing', lang)}</span>
           )}
+          {/* CSV buttons */}
+          <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                padding: '9px 14px', cursor: 'pointer', background: 'transparent',
+                border: `1px solid ${T.cyan}`, color: T.cyan,
+                fontFamily: "'Courier New', monospace", fontSize: 9, letterSpacing: 2,
+                transition: 'all 0.15s',
+              }}
+            >
+              {t('csvImportBtn', lang)}
+            </button>
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              style={{
+                padding: '9px 14px', cursor: 'pointer', background: 'transparent',
+                border: `1px solid ${T.borderDim}`, color: T.textDim,
+                fontFamily: "'Courier New', monospace", fontSize: 9, letterSpacing: 2,
+                transition: 'all 0.15s',
+              }}
+            >
+              {t('csvExportBtn', lang)}
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadTemplate}
+              style={{
+                padding: '9px 14px', cursor: 'pointer', background: 'transparent',
+                border: `1px solid ${T.borderDim}`, color: T.textDim,
+                fontFamily: "'Courier New', monospace", fontSize: 9, letterSpacing: 2,
+                transition: 'all 0.15s',
+              }}
+            >
+              {t('csvTemplateBtn', lang)}
+            </button>
+          </div>
         </div>
         {saved && (
           <div style={{ color: T.textDim, fontSize: 10, marginTop: 8 }}>
@@ -538,6 +723,17 @@ export default function DataLanePage() {
               <span style={{ marginLeft: 8 }}>{saved.periods.length} period{saved.periods.length > 1 ? 's' : ''}</span>
             )}
           </div>
+        )}
+
+        {/* ── CSV Preview panel ─────────────────────────────────────────────── */}
+        {csvPreview && (
+          <CsvPreviewPanel
+            preview={csvPreview.rows}
+            skipped={csvPreview.skipped}
+            lang={lang}
+            onApply={handleApplyCSV}
+            onCancel={() => setCsvPreview(null)}
+          />
         )}
       </PageLayout>
     </div>
