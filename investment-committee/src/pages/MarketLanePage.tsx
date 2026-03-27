@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { T, NumericInput, Textarea, Button, PageLayout, SectionHeader, hexRgb } from '../components/common/ui'
+import { T, NumericInput, Button, PageLayout, SectionHeader, hexRgb } from '../components/common/ui'
 import { useStore } from '../state/store'
 import { t } from '../lib/i18n'
 import { marketAnalysisRepository } from '../db/repositories'

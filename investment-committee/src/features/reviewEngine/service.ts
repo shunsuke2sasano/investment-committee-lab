@@ -1,4 +1,4 @@
-import type { ThesisAnalysis, DataAnalysis, MarketAnalysis, ValuationReport, ReviewReport, ReviewRisk, ReviewMismatch } from '../types/domain'
+import type { ThesisAnalysis, DataAnalysis, MarketAnalysis, ValuationReport, ReviewReport, ReviewRisk, ReviewMismatch } from '../../types/domain'
 import { settingsRepository } from '../../db/repositories'
 
 // ── Payload ───────────────────────────────────────────────────────────────

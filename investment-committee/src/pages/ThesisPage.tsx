@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
-import { T, Input, Textarea, Button, PageLayout, SectionHeader, hexRgb, NumericInput } from '../components/common/ui'
+import { T, Input, Textarea, Button, PageLayout, SectionHeader, hexRgb } from '../components/common/ui'
 import { useStore } from '../state/store'
 import { thesisRepository, valuationRepository, companyRepository } from '../db/repositories'
 import { estimateTimeToValidate, generateHorizonExplanation } from '../features/horizonEngine/service'

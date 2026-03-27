@@ -1,7 +1,7 @@
 import type {
   DataLaneInput, DataLaneScores,
   MarketLaneInput, MarketLaneOutputs,
-  ValuationAssumptions, ValuationScenario, ValuationReport,
+  ValuationAssumptions, ValuationScenario,
   VerdictAxes, VerdictResult, VerdictProfile,
   ThesisStatus, MonitorItem,
 } from '../types/domain'

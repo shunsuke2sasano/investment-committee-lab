@@ -1,4 +1,4 @@
-import type { CollapseCondition, TimeToValidate } from '../types/domain'
+import type { CollapseCondition, TimeToValidate } from '../../types/domain'
 import { settingsRepository } from '../../db/repositories'
 
 // ═══════════════════════════════════════════════════════════════════════════

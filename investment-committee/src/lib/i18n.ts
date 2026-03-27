@@ -419,7 +419,7 @@ export type TranslationKey = keyof typeof translations
 export function t(key: TranslationKey, lang: Lang, vars?: Record<string, string | number>): string {
   const entry = translations[key]
   if (!entry) return key
-  let str = entry[lang] ?? entry['en']
+  let str: string = entry[lang] ?? entry['en']
   if (vars) {
     Object.entries(vars).forEach(([k, v]) => {
       str = str.replace(`{${k}}`, String(v))

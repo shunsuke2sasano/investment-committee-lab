@@ -82,8 +82,12 @@ export function parseCSV(text: string): ParseResult {
       continue
     }
 
+    if (rows.length >= 5) {
+      skipped.push({ rowNum: i + 1, reason: 'Exceeded maximum of 5 periods' })
+      continue
+    }
+
     const input: DataLaneInput = { ...EMPTY_INPUT }
-    let hasError = false
 
     for (let j = 0; j < headers.length; j++) {
       if (j === fyIdx) continue
@@ -94,16 +98,12 @@ export function parseCSV(text: string): ParseResult {
       if (raw === undefined || raw === '') continue  // empty → stays null
 
       const num = parseFloat(raw)
-      if (isNaN(num)) {
-        skipped.push({ rowNum: i + 1, reason: `Column "${headers[j]}" is not a number: "${raw}"` })
-        hasError = true
-        break  // skip entire row on first non-numeric value
+      if (!isNaN(num)) {
+        input[field] = num
       }
-
-      input[field] = num
+      // non-numeric → leave as null (no row skip)
     }
 
-    if (hasError) continue
     rows.push({ fiscalYear: fyVal, input })
   }
 
@@ -119,7 +119,9 @@ export function mergePeriodsCSV(
   const map = new Map<string, FiscalPeriodData>()
   for (const p of existing) map.set(p.fiscalYear, p)
   for (const p of incoming) map.set(p.fiscalYear, p)
-  return Array.from(map.values()).sort((a, b) => b.fiscalYear.localeCompare(a.fiscalYear))
+  return Array.from(map.values())
+    .sort((a, b) => b.fiscalYear.localeCompare(a.fiscalYear))
+    .slice(0, 5)
 }
 
 export function exportToCSV(periods: FiscalPeriodData[]): string {
@@ -140,13 +142,36 @@ export function exportToCSV(periods: FiscalPeriodData[]): string {
   return lines.join('\n')
 }
 
+const TEMPLATE_SAMPLE_VALUES: Record<keyof DataLaneInput, number> = {
+  revenueGrowthYoy:    12.5,
+  revenueGrowth3y:     11.0,
+  grossMargin:         55.0,
+  operatingMargin:     18.0,
+  fcfMargin:           15.0,
+  roic:                14.0,
+  debtToEbitda:         1.5,
+  netDebtToEquity:     30.0,
+  shareDilutionAnnual:  1.2,
+  reinvestmentRate:    25.0,
+  currentRatio:         2.0,
+}
+
 export function generateTemplate(): string {
   const headers = ['fiscalYear', ...CSV_COLUMNS.map(c => c.header)]
-  return headers.join(',') + '\n'
+  const sampleYears = ['FY2022', 'FY2023', 'FY2024']
+  const lines: string[] = [headers.join(',')]
+
+  for (const fy of sampleYears) {
+    const cells = [fy, ...CSV_COLUMNS.map(({ field }) => String(TEMPLATE_SAMPLE_VALUES[field]))]
+    lines.push(cells.join(','))
+  }
+
+  return lines.join('\n')
 }
 
 export function downloadCSV(content: string, filename: string): void {
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
+  const BOM = '\uFEFF'
+  const blob = new Blob([BOM + content], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

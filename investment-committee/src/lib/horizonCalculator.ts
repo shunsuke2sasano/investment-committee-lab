@@ -1,5 +1,5 @@
 import type {
-  CollapseCondition, HorizonInference, HorizonBasis, ValuationAssumptions
+  CollapseCondition, HorizonInference, ValuationAssumptions
 } from '../types/domain'
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -26,9 +26,6 @@ export function inferHorizonFromConditions(
   )
   if (primaryConditions.length > 0) {
     const months = primaryConditions[0].timeToValidate!.months
-    const allMonths = conditions
-      .filter(c => c.timeToValidate !== null)
-      .map(c => c.timeToValidate!.months)
 
     return {
       recommendedMonths: months,

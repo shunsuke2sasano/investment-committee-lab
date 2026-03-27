@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   T, Button, PageLayout, SectionHeader, VerdictBadge, ScoreBadge,
@@ -73,7 +73,7 @@ function emptyAxis(): AxisScore {
 }
 
 function emptyAxes(): VerdictAxes {
-  return Object.fromEntries(AXES.map(a => [a.key, emptyAxis()])) as VerdictAxes
+  return Object.fromEntries(AXES.map(a => [a.key, emptyAxis()])) as unknown as VerdictAxes
 }
 
 export default function VerdictPage() {

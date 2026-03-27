@@ -10,7 +10,7 @@ const STATUS_COLOR: Record<string, string> = {
   draft: T.textDim, active: T.cyan, archived: T.slate,
 }
 
-function ThesisAlarmBadge({ status, lang }: { status: 'warning' | 'broken'; lang: ReturnType<typeof useStore>['lang'] }) {
+function ThesisAlarmBadge({ status, lang }: { status: 'warning' | 'broken'; lang: 'en' | 'ja' }) {
   const color = status === 'broken' ? T.red : T.yellow
   const label = status === 'broken' ? t('thesisBroken', lang) : t('thesisAtRisk', lang)
   return (

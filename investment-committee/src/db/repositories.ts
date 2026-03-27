@@ -68,7 +68,10 @@ async function decRow<T>(raw: any): Promise<T | undefined> {
 // Fix 3: notify UI once (debounced) if any records fail
 async function decRows<T>(rows: any[]): Promise<T[]> {
   const results = await Promise.all(rows.map(r => decRow<T>(r)))
-  const filtered = results.filter((r): r is T => r !== undefined)
+  const filtered: T[] = []
+  for (const r of results) {
+    if (r !== undefined) filtered.push(r)
+  }
   if (filtered.length < rows.length) notifyDecryptError()
   return filtered
 }

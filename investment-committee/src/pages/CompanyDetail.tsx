@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate, NavLink } from 'react-router-dom'
 import { T, hexRgb, SectionHeader, Button, VerdictBadge, InfoRow } from '../components/common/ui'
 import { useStore } from '../state/store'

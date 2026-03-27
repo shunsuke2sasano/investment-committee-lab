@@ -1,14 +1,14 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import {
-  T, Button, Input, Textarea, Select, PageLayout, SectionHeader,
-  hexRgb, NumericInput, InfoRow
+  T, Button, PageLayout, SectionHeader,
+  hexRgb
 } from '../components/common/ui'
 import { useStore } from '../state/store'
 import { t } from '../lib/i18n'
 import { monitoringRepository, thesisRepository } from '../db/repositories'
 import { evaluateMonitorItemStatus, calculateThesisStatus } from '../lib/calculators'
-import type { MonitoringPlan, MonitorItem, CollapseOperator, ThesisStatus } from '../types/domain'
+import type { MonitorItem, CollapseOperator, ThesisStatus } from '../types/domain'
 
 function uid() { return crypto.randomUUID() }
 
