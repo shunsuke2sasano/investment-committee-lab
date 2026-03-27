@@ -5,6 +5,7 @@ import { useStore } from '../state/store'
 import { t } from '../lib/i18n'
 import { companyRepository } from '../db/repositories'
 import { isJapaneseStock, fetchFmpProfile } from '../lib/fmpClient'
+import { inferPresetFromSector, INDUSTRY_PRESETS } from '../lib/industryPresets'
 
 export default function CompanyNew() {
   const navigate = useNavigate()
@@ -123,6 +124,15 @@ export default function CompanyNew() {
           <Input label={t('companyNameLabel', lang)} value={form.companyName} onChange={v => setForm(f => ({ ...f, companyName: v }))} error={errors.companyName} placeholder="NVIDIA Corporation" accent={T.cyan} />
           <Select label={t('sectorLabel', lang)} value={form.sector} onChange={v => setForm(f => ({ ...f, sector: v }))}
             options={SECTORS.map(s => ({ value: s, label: s || t('sectorSelect', lang) }))} />
+          {form.sector && (() => {
+            const pid = inferPresetFromSector(form.sector)
+            const preset = INDUSTRY_PRESETS[pid]
+            return (
+              <div style={{ fontSize: 9, color: T.cyan, marginTop: -8, marginBottom: 12, fontFamily: "'Courier New', monospace", letterSpacing: 1 }}>
+                → {t('presetAutoDetected', lang)}: {lang === 'ja' ? preset.labelJa : preset.label}
+              </div>
+            )
+          })()}
 
           <SectionHeader label="MARKET DATA (Optional)" color={T.yellow} />
           <NumericInput label={t('currentPriceLabel', lang)} value={form.currentPrice} onChange={v => setForm(f => ({ ...f, currentPrice: v }))} unit="$" placeholder="480" />

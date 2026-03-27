@@ -133,6 +133,23 @@ export const translations = {
   capitalEfficiency: { en: 'CAPITAL EFFICIENCY', ja: '資本効率' },
   balanceSheet: { en: 'BALANCE SHEET', ja: 'バランスシート' },
   saveDataLane: { en: 'SAVE DATA LANE', ja: 'データレーンを保存' },
+  addPeriod: { en: '+ ADD PERIOD', ja: '+ 期を追加' },
+  // ── Industry presets (Phase 4-B3) ─────────────────────────────────────
+  presetSelector:       { en: 'INDUSTRY PRESET',         ja: '業界プリセット' },
+  presetAutoDetected:   { en: 'auto-detected from sector', ja: 'セクターから自動推定' },
+  vetoHintTitle:        { en: 'VETO CANDIDATE LINES',    ja: 'VETO候補ライン' },
+  compositeMetricTitle: { en: 'COMPOSITE METRIC',        ja: '複合指標' },
+  saasMetrics:          { en: 'SAAS METRICS',            ja: 'SaaS指標' },
+  profitabilitySection: { en: 'PROFITABILITY',           ja: '収益性' },
+  leverageSection:      { en: 'LEVERAGE / DEBT',         ja: 'レバレッジ' },
+  bankingSection:       { en: 'BANKING METRICS',         ja: '銀行指標' },
+  trendAnalysis: { en: 'TREND ANALYSIS', ja: 'トレンド分析' },
+  periodLatestBadge: { en: 'LATEST', ja: '最新' },
+  yoyLabel: { en: 'YoY', ja: '前年比' },
+  trendUp: { en: 'UPTREND', ja: '上昇' },
+  trendDown: { en: 'DOWNTREND', ja: '下降' },
+  trendFlat: { en: 'FLAT', ja: '横ばい' },
+  maxPeriodsReached: { en: 'Max 5 periods', ja: '最大5期' },
 
   // ── Market Lane ──────────────────────────────────────────────────────────
   marketTitle: { en: 'MARKET LANE', ja: 'マーケットレーン' },

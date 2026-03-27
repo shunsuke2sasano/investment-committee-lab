@@ -96,6 +96,24 @@ export function calculateDataScores(input: DataLaneInput): DataLaneScores {
   }
 }
 
+// ── Trend helpers (Phase 4-B2) ────────────────────────────────────────────
+
+/** Delta between current and previous period (pt difference, not % change) */
+export function calculateYoY(current: number | null, prev: number | null): number | null {
+  if (current === null || prev === null) return null
+  return current - prev
+}
+
+/** Detect trend direction from chronological values (oldest → newest) */
+export function detectTrend(values: (number | null)[]): 'up' | 'down' | 'flat' {
+  const valid = values.filter((v): v is number => v !== null)
+  if (valid.length < 2) return 'flat'
+  const delta = valid[valid.length - 1] - valid[0]
+  if (delta > 0.5) return 'up'
+  if (delta < -0.5) return 'down'
+  return 'flat'
+}
+
 export function buildDataSummary(scores: DataLaneScores, input: DataLaneInput): string {
   const lines: string[] = []
   lines.push(`Business Quality: ${scores.businessQuality}/5`)

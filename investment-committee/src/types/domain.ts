@@ -95,6 +95,12 @@ export interface DataLaneInput {
   currentRatio: number | null
 }
 
+// ── Multi-period data (Phase 4-B2) ────────────────────────────────────────
+export interface FiscalPeriodData {
+  fiscalYear: string          // e.g. "FY2024"
+  input: DataLaneInput
+}
+
 export interface DataLaneScores {
   businessQuality: 1 | 2 | 3 | 4 | 5
   capitalEfficiency: 1 | 2 | 3 | 4 | 5
@@ -105,10 +111,11 @@ export interface DataLaneScores {
 export interface DataAnalysis {
   id: string
   companyId: string
-  input: DataLaneInput
+  input: DataLaneInput        // latest period (backward compat with Verdict feed)
   scores: DataLaneScores
   summary: string
   computedAt: string
+  periods?: FiscalPeriodData[]  // multi-period data; undefined = legacy single-period
 }
 
 // ── Market Lane ──────────────────────────────────────────────────────────
