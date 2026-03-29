@@ -14,6 +14,8 @@ investment-committee/   ← Vite + React + TypeScript プロジェクト
     lib/calculators.ts    純粋計算関数
     lib/i18n.ts           EN/JA翻訳
     lib/horizonCalculator.ts  Horizon推論計算
+    lib/industryPresets.ts    業界別プリセット定義（Phase 4-B3）
+    lib/fmpClient.ts          FMP API クライアント（Phase 3）
     features/reviewEngine/service.ts   AI Review
     features/horizonEngine/service.ts  AI Horizon推定
     state/store.ts        Zustand store
@@ -68,27 +70,46 @@ businessQuality / growthQuality / capitalEfficiency / balanceSheetSafety
 優先順位: Primary条件 → 全条件中央値 → Valuation逆算 → fallback(36ヶ月)
 保存時にCompanyの`investmentHorizonMonths`を自動更新。
 
-## 現在の進捗（2026-03-12時点）
+## 現在の進捗（2026-03-27時点）
 詳細は `docs/ic-progress.docx` を参照。
 
-**完了**: 全ページUI・IndexedDB・3レーン計算・CAGRゲート・i18n(EN/JA)・Export/Import・Horizon自動算出
+### 完了済み機能一覧
 
-**P0 TODO（最優先）**:
-1. Thesis Horizon → Valuation years 自動引き継ぎ（ValuationPage.tsx）
-2. Data Lane → Verdict 軸スコア候補フィード（VerdictPage.tsx）
-3. Market Lane → Verdict 軸スコア候補フィード（VerdictPage.tsx）
+**Phase 1（基盤）**:
+- 全ページUI（Thesis / Data / Market / Valuation / Verdict / Review / Monitoring）
+- IndexedDB（Dexie）スキーマ・Repository
+- 3レーン計算（Thesis / Data / Market）
+- CAGRゲート（期待CAGR < 12% → BUY自動ブロック）
+- i18n（EN/JA）
 
-**P1 TODO**:
-4. CompanyDetail パイプライン完了バッジ
-5. Monitoring breach → CompanyDetail赤バッジ
-6. Settings画面でAPIキー直接入力UI
+**Phase 2（連携強化）**:
+- Thesis Horizon → Valuation years 自動引き継ぎ
+- Data Lane → Verdict 軸スコア候補フィード
+- Market Lane → Verdict 軸スコア候補フィード
+- CompanyDetail パイプライン完了バッジ
+- Monitoring breach → CompanyDetail赤バッジ
+- Settings画面でAPIキー直接入力UI
+- Export/Import（JSON）
+- Horizon自動算出（崩壊条件 → 推奨投資期間）
 
-**P2 TODO（Phase 2）**:
-- WebCrypto AES-GCM暗号化
-- System Metrics集計（buyHitRate / passMissRate）
+**Phase 3（Financial API）**:
+- FMP API連携（`lib/fmpClient.ts`）
+- 財務データ自動取得・Data Lane補完
 
-**Phase 3**:
-- Financial API連携（FMP等）
+**Phase 4-B2（複数期データ）**:
+- 複数期（年次/四半期）財務データ入力
+- SVGトレンドチャート
+- YoYバッジ（前年比増減表示）
+
+**Phase 4-B3（スコアリング強化）**:
+- 業界別プリセット6種（`lib/industryPresets.ts`）
+- VETO候補ライン自動提示
+- Rule of 40 計算・表示
+
+### 次のタスク
+
+**Phase 4-B4**:
+- CSVインポート（財務データ一括取込）
 
 ## コーディング規約
 - スタイルは全てinline style（Tailwind不使用）

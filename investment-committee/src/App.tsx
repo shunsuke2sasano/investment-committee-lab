@@ -21,16 +21,18 @@ const MonitoringPage = React.lazy(() => import('./pages/MonitoringPage'))
 const LessonPage     = React.lazy(() => import('./pages/LessonPage'))
 const MetricsPage    = React.lazy(() => import('./pages/MetricsPage'))
 const SettingsPage   = React.lazy(() => import('./pages/SettingsPage'))
+const PortfolioPage  = React.lazy(() => import('./pages/PortfolioPage'))
 
 function Layout({ children }: { children: React.ReactNode }) {
   const toast = useStore(s => s.toast)
   const lang  = useStore(s => s.lang)
 
   const NAV = [
-    { to: '/companies', key: 'nav_cases' as const },
-    { to: '/lessons',   key: 'nav_lessons' as const },
-    { to: '/metrics',   key: 'nav_metrics' as const },
-    { to: '/settings',  key: 'nav_settings' as const },
+    { to: '/companies',  key: 'nav_cases' as const },
+    { to: '/portfolio',  key: 'nav_portfolio' as const },
+    { to: '/lessons',    key: 'nav_lessons' as const },
+    { to: '/metrics',    key: 'nav_metrics' as const },
+    { to: '/settings',   key: 'nav_settings' as const },
   ]
 
   return (
@@ -219,6 +221,7 @@ export default function App() {
             <Route path="/companies/:id/verdict"    element={<VerdictPage />} />
             <Route path="/companies/:id/monitoring" element={<MonitoringPage />} />
             <Route path="/companies/:id/lessons"    element={<LessonPage />} />
+            <Route path="/portfolio"                element={<PortfolioPage />} />
             <Route path="/lessons"                  element={<LessonPage />} />
             <Route path="/metrics"                  element={<MetricsPage />} />
             <Route path="/settings"                 element={<SettingsPage />} />

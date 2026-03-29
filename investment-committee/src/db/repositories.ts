@@ -223,6 +223,16 @@ export const valuationRepository = {
     }
     return db.valuation_reports.where('companyId').equals(companyId).reverse().first()
   },
+  async listLatestAll(): Promise<Map<string, ValuationReport>> {
+    const raw = await db.valuation_reports.toArray()
+    const all = await decRows<ValuationReport>(raw)
+    const map = new Map<string, ValuationReport>()
+    all.forEach(v => {
+      const existing = map.get(v.companyId)
+      if (!existing || v.createdAt > existing.createdAt) map.set(v.companyId, v)
+    })
+    return map
+  },
   async save(input: Omit<ValuationReport, 'id'>) {
     const row: ValuationReport = { ...input, id: uid() }
     await db.valuation_reports.add(await encRow(row, PLAIN.valuation))

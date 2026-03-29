@@ -402,6 +402,53 @@ export const translations = {
   settingsSaved: { en: 'Settings saved', ja: '設定を保存しました' },
   backupDone: { en: 'Backup complete', ja: 'バックアップ完了' },
 
+  // ── Score Explainer ───────────────────────────────────────────────────────
+  scoreReasonPositive: { en: '↑', ja: '↑' },
+  scoreReasonNegative: { en: '↓', ja: '↓' },
+  scoreReasonNeutral:  { en: '→', ja: '→' },
+  scoreNoData:         { en: 'No data', ja: 'データなし' },
+  scoreOutOfFive:      { en: '/5',      ja: '/5' },
+
+  // ── Field Help ────────────────────────────────────────────────────────────
+  helpWhat:    { en: 'WHAT IS THIS',  ja: 'この指標は' },
+  helpFormula: { en: 'FORMULA',       ja: '計算式' },
+  helpGood:    { en: '✓ Good',        ja: '✓ 良い水準' },
+  helpBad:     { en: '✗ Watch out',   ja: '✗ 注意水準' },
+  helpTip:     { en: '💡 Tip',        ja: '💡 ポイント' },
+
+  // ── Thesis AI Guide ───────────────────────────────────────────────────────
+  thesisGuideBtn:             { en: 'AI DRAFT',                   ja: 'AI叩き台生成' },
+  thesisGuideModalTitle:      { en: 'AI THESIS GUIDE',            ja: 'AI Thesisガイド' },
+  thesisGuideMemoLabel:       { en: 'What do you know about {ticker}? (OK to say "nothing")', ja: '{ticker} についてどんな会社か教えてください。「知らない」でも大丈夫です。' },
+  thesisGuideMemoPlaceholder: { en: 'e.g. AI chip company / I don\'t know', ja: '例：AIチップを作っている会社 / 知らない' },
+  thesisGuideGenerateBtn:     { en: 'GENERATE',                   ja: '生成する' },
+  thesisGuideApplyBtn:        { en: 'APPLY TO FORM',              ja: 'フォームに反映する' },
+  thesisGuideResultTitle:     { en: 'AI THESIS GUIDE — RESULT',   ja: 'AI Thesisガイド — 結果' },
+  thesisGuideDisclaimer:      { en: '※ AI-generated draft. Please review and edit before saving.', ja: '※ AIの出力です。必ず内容を確認・編集してから保存してください。' },
+  thesisGuideOverwrite:       { en: 'Existing thesis data will be overwritten. Continue?', ja: '既存のThesisデータが上書きされます。続行しますか？' },
+  thesisGuideNoKey:           { en: 'Set Anthropic API key in Settings first', ja: 'SettingsでAnthropicのAPIキーを先に設定してください' },
+  thesisGuideError:           { en: 'Generation failed. Please try again.', ja: '生成に失敗しました。もう一度お試しください。' },
+  thesisGuideGenerating:      { en: 'Generating…',                ja: '生成中…' },
+
+  // ── Portfolio ─────────────────────────────────────────────────────────────
+  portfolioTitle:      { en: 'PORTFOLIO VIEW',       ja: 'ポートフォリオ' },
+  portfolioSubtitle:   { en: 'ALL CASES OVERVIEW',   ja: '全ケース概覧' },
+  portfolioEmpty:      { en: 'NO CASES YET',         ja: 'ケースなし' },
+  portfolioFilterAll:  { en: 'ALL',                  ja: 'すべて' },
+  portfolioSectorDist: { en: 'SECTOR',               ja: 'セクター分布' },
+  portfolioScoreDist:  { en: 'SCORE',                ja: 'スコア分布' },
+  portfolioCAGRDist:   { en: 'CAGR',                 ja: 'CAGR分布' },
+  portfolioColTicker:  { en: 'TICKER',               ja: 'TICKER' },
+  portfolioColCompany: { en: 'COMPANY',              ja: '会社名' },
+  portfolioColSector:  { en: 'SECTOR',               ja: 'セクター' },
+  portfolioColVerdict: { en: 'VERDICT',              ja: '判定' },
+  portfolioColScore:   { en: 'SCORE',                ja: 'スコア' },
+  portfolioColCAGR:    { en: 'CAGR',                 ja: 'CAGR' },
+  portfolioColHorizon: { en: 'HORIZON',              ja: '期間' },
+  portfolioColAxes:    { en: 'AXES',                 ja: '8軸' },
+  portfolioNoVerdict:  { en: 'No verdict',           ja: 'Verdict未作成' },
+  nav_portfolio:       { en: 'PORTFOLIO',            ja: 'ポートフォリオ' },
+
   // ── CSV Import / Export ────────────────────────────────────────────────────
   csvImportBtn:      { en: 'IMPORT CSV',              ja: 'CSVインポート' },
   csvExportBtn:      { en: 'EXPORT CSV',              ja: 'CSVエクスポート' },

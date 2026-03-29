@@ -2,9 +2,10 @@ import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { T, Input, Textarea, Button, PageLayout, SectionHeader, hexRgb } from '../components/common/ui'
 import { useStore } from '../state/store'
-import { thesisRepository, valuationRepository, companyRepository } from '../db/repositories'
+import { thesisRepository, valuationRepository, companyRepository, settingsRepository } from '../db/repositories'
 import { estimateTimeToValidate, generateHorizonExplanation } from '../features/horizonEngine/service'
 import { inferHorizonFromConditions, findValuationOptimalHorizon, calcHorizonConfidence } from '../lib/horizonCalculator'
+import { generateThesisDraft, type ThesisGuideDraft } from '../features/thesisGuide/service'
 import { t } from '../lib/i18n'
 import type { ThesisAnalysis, CollapseCondition, HorizonInference } from '../types/domain'
 
@@ -45,6 +46,14 @@ export default function ThesisPage() {
   const [generatingExplanation, setGeneratingExplanation] = useState(false)
   const [aiExplanation, setAiExplanation] = useState<string | null>(null)
 
+  // ── AI Guide state ─────────────────────────────────────────────────────
+  const [guideOpen, setGuideOpen] = useState(false)
+  const [guideMemo, setGuideMemo] = useState('')
+  const [guideLoading, setGuideLoading] = useState(false)
+  const [guideError, setGuideError] = useState<string | null>(null)
+  const [guideDraft, setGuideDraft] = useState<ThesisGuideDraft | null>(null)
+  const [hasApiKey, setHasApiKey] = useState(false)
+
   useEffect(() => {
     if (!companyId) return
     thesisRepository.getLatest(companyId).then(t => {
@@ -71,6 +80,15 @@ export default function ThesisPage() {
       if (v) setValuationOptimalMonths(findValuationOptimalHorizon(v.assumptions))
     })
   }, [companyId])
+
+  // APIキー確認
+  useEffect(() => {
+    settingsRepository.get().then(s => {
+      const dbKey = (s.anthropicApiKey ?? '').trim()
+      const envKey = ((import.meta as any).env?.VITE_ANTHROPIC_API_KEY ?? '').trim()
+      setHasApiKey(!!(dbKey || envKey))
+    })
+  }, [])
 
   // Horizon計算 — conditionsが変わるたびに同期的に再計算
   const horizon = useMemo(() => {
@@ -157,6 +175,63 @@ export default function ThesisPage() {
     setGeneratingExplanation(false)
   }
 
+  // ── AI Guide handlers ──────────────────────────────────────────────────
+  function openGuide() {
+    setGuideMemo('')
+    setGuideError(null)
+    setGuideDraft(null)
+    setGuideOpen(true)
+  }
+
+  async function handleGenerate() {
+    if (!company) return
+    setGuideLoading(true)
+    setGuideError(null)
+    try {
+      const draft = await generateThesisDraft(
+        company.ticker,
+        company.companyName,
+        company.sector,
+        guideMemo,
+      )
+      setGuideDraft(draft)
+    } catch (e: any) {
+      if (e.message === 'NO_API_KEY') {
+        setGuideError(t('thesisGuideNoKey', lang))
+      } else if (e.message === 'PARSE_ERROR') {
+        setGuideError(t('thesisGuideError', lang))
+      } else {
+        setGuideError(t('thesisGuideError', lang))
+      }
+    }
+    setGuideLoading(false)
+  }
+
+  function handleApplyDraft() {
+    if (!guideDraft) return
+    const hasExisting = thesisText.trim() || drivers.some(d => d.trim()) || conditions.some(c => c.label.trim())
+    if (hasExisting && !confirm(t('thesisGuideOverwrite', lang))) return
+
+    setThesisText(guideDraft.thesisText)
+    setDrivers([
+      guideDraft.drivers[0] ?? '',
+      guideDraft.drivers[1] ?? '',
+      guideDraft.drivers[2] ?? '',
+    ])
+    setConditions(guideDraft.collapseConditions.slice(0, 3).map(cc => ({
+      id: uid(),
+      label: cc.label,
+      note: cc.note,
+      metricKey: null,
+      operator: 'manual' as const,
+      threshold: null,
+      unit: null,
+      timeToValidate: null,
+      isPrimary: false,
+    })))
+    setGuideOpen(false)
+  }
+
   function addCondition() { setConditions(p => [...p, emptyCondition()]) }
   function removeCondition(id: string) { setConditions(p => p.filter(c => c.id !== id)) }
   function updateCondition(id: string, patch: Partial<CollapseCondition>) {
@@ -167,7 +242,6 @@ export default function ThesisPage() {
     setConditions(p => p.map(c => ({ ...c, isPrimary: c.id === id })))
   }
 
-  const hasApiKey = !!(import.meta as any).env?.VITE_ANTHROPIC_API_KEY
   const horizonConfidence = calcHorizonConfidence(conditions)
 
   return (
@@ -269,7 +343,22 @@ export default function ThesisPage() {
           accent={T.textDim}
         />
 
-        <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+        <div style={{ display: 'flex', gap: 12, marginTop: 24, alignItems: 'center' }}>
+          <Button
+            onClick={openGuide}
+            variant="ghost"
+            size="sm"
+            accent={T.cyan}
+            disabled={!hasApiKey}
+          >
+            ✦ {t('thesisGuideBtn', lang)}
+          </Button>
+          {!hasApiKey && (
+            <span style={{ color: T.textDim, fontSize: 10 }}>
+              ({t('thesisGuideNoKey', lang)})
+            </span>
+          )}
+          <div style={{ flex: 1 }} />
           <Button onClick={handleSave} loading={loading} accent={T.purple}>
             {t('saveThesis', lang)}
           </Button>
@@ -280,6 +369,167 @@ export default function ThesisPage() {
           </div>
         )}
       </PageLayout>
+
+      {/* ── AI Guide Modal ────────────────────────────────────────────── */}
+      {guideOpen && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.75)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setGuideOpen(false) }}
+        >
+          <div style={{
+            background: T.surface,
+            border: `1px solid ${T.border}`,
+            padding: '32px 36px',
+            width: '100%',
+            maxWidth: 520,
+            fontFamily: "'Courier New',monospace",
+          }}>
+            {/* Title */}
+            <div style={{ color: T.textMid, fontSize: 9, letterSpacing: 5, marginBottom: 6 }}>
+              {guideDraft ? t('thesisGuideResultTitle', lang) : t('thesisGuideModalTitle', lang)}
+            </div>
+            <div style={{ width: 40, height: 1, background: T.cyan, marginBottom: 20 }} />
+
+            {!guideDraft ? (
+              /* ── Input phase ── */
+              <>
+                <label style={{ color: T.textMid, fontSize: 9, letterSpacing: 3, display: 'block', marginBottom: 8 }}>
+                  {t('thesisGuideMemoLabel', lang).replace('{ticker}', company?.ticker ?? '')}
+                </label>
+                <textarea
+                  autoFocus
+                  value={guideMemo}
+                  onChange={e => setGuideMemo(e.target.value)}
+                  placeholder={t('thesisGuideMemoPlaceholder', lang)}
+                  rows={4}
+                  style={{
+                    width: '100%', background: '#080D12',
+                    border: `1px solid ${T.borderDim}`,
+                    color: T.text, fontFamily: "'Courier New',monospace", fontSize: 13,
+                    padding: '10px 12px', outline: 'none', resize: 'vertical',
+                    boxSizing: 'border-box', marginBottom: 16,
+                  }}
+                  onFocus={e => { e.target.style.borderColor = T.cyan }}
+                  onBlur={e => { e.target.style.borderColor = T.borderDim }}
+                  onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleGenerate() }}
+                />
+
+                {guideError && (
+                  <div style={{ color: T.red, fontSize: 11, marginBottom: 14, letterSpacing: 1 }}>
+                    ✗ {guideError}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                  <Button
+                    onClick={() => setGuideOpen(false)}
+                    variant="ghost"
+                    size="sm"
+                    accent={T.textDim}
+                  >
+                    {t('cancelBtn', lang)}
+                  </Button>
+                  <Button
+                    onClick={handleGenerate}
+                    loading={guideLoading}
+                    size="sm"
+                    accent={T.cyan}
+                  >
+                    {guideLoading ? t('thesisGuideGenerating', lang) : t('thesisGuideGenerateBtn', lang)}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              /* ── Result phase ── */
+              <>
+                {/* Thesis text */}
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ color: T.cyan, fontSize: 9, letterSpacing: 3, marginBottom: 8 }}>
+                    ▼ {lang === 'ja' ? '投資仮説（1行）' : 'INVESTMENT THESIS'}
+                  </div>
+                  <div style={{
+                    color: T.text, fontSize: 13, lineHeight: 1.7,
+                    padding: '10px 14px', background: '#080D12',
+                    border: `1px solid ${T.borderDim}`,
+                  }}>
+                    {guideDraft.thesisText}
+                  </div>
+                </div>
+
+                {/* Drivers */}
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ color: T.purple, fontSize: 9, letterSpacing: 3, marginBottom: 8 }}>
+                    ▼ {lang === 'ja' ? 'ドライバー（3つ）' : 'DRIVERS'}
+                  </div>
+                  {guideDraft.drivers.map((d, i) => (
+                    <div key={i} style={{
+                      color: T.text, fontSize: 12, lineHeight: 1.7,
+                      padding: '6px 14px', marginBottom: 4,
+                      background: '#080D12', border: `1px solid ${T.borderDim}`,
+                    }}>
+                      {i + 1}. {d}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Collapse conditions */}
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ color: T.red, fontSize: 9, letterSpacing: 3, marginBottom: 8 }}>
+                    ▼ {lang === 'ja' ? '崩壊条件（3つ）' : 'COLLAPSE CONDITIONS'}
+                  </div>
+                  {guideDraft.collapseConditions.map((cc, i) => (
+                    <div key={i} style={{
+                      padding: '8px 14px', marginBottom: 4,
+                      background: '#080D12', border: `1px solid ${T.borderDim}`,
+                    }}>
+                      <div style={{ color: T.text, fontSize: 12, marginBottom: 3 }}>
+                        · {cc.label}
+                      </div>
+                      {cc.note && (
+                        <div style={{ color: T.textDim, fontSize: 11, lineHeight: 1.6 }}>
+                          {cc.note}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Disclaimer */}
+                <div style={{
+                  color: T.textDim, fontSize: 10, lineHeight: 1.7,
+                  padding: '8px 12px', marginBottom: 20,
+                  background: `rgba(${hexRgb(T.yellow)},0.04)`,
+                  border: `1px solid ${T.yellow}33`,
+                }}>
+                  {t('thesisGuideDisclaimer', lang)}
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                  <Button
+                    onClick={() => { setGuideDraft(null); setGuideError(null) }}
+                    variant="ghost"
+                    size="sm"
+                    accent={T.textDim}
+                  >
+                    {t('cancelBtn', lang)}
+                  </Button>
+                  <Button
+                    onClick={handleApplyDraft}
+                    size="sm"
+                    accent={T.cyan}
+                  >
+                    {t('thesisGuideApplyBtn', lang)}
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

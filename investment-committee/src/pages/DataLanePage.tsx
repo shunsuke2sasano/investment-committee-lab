@@ -1,11 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { T, NumericInput, Button, PageLayout, SectionHeader, ScoreBadge, Select, hexRgb } from '../components/common/ui'
 import { useStore } from '../state/store'
 import { t } from '../lib/i18n'
 import { dataAnalysisRepository } from '../db/repositories'
 import { calculateDataScores, buildDataSummary, calculateYoY, detectTrend } from '../lib/calculators'
-import type { DataLaneInput, DataAnalysis, FiscalPeriodData } from '../types/domain'
+import type { DataLaneInput, DataLaneScores, DataAnalysis, FiscalPeriodData } from '../types/domain'
 import { isJapaneseStock, fetchFmpFinancials } from '../lib/fmpClient'
 import { parseCSV, mergePeriodsCSV, exportToCSV, generateTemplate, downloadCSV, CSV_COLUMNS } from '../lib/csvParser'
 import type { SkippedRow } from '../lib/csvParser'
@@ -14,6 +14,12 @@ import {
   getFieldLabel, FIELD_UNITS, FIELD_PLACEHOLDERS,
   type PresetId, type IndustryPreset, type PresetFieldGroup, type ColorToken,
 } from '../lib/industryPresets'
+import { FIELD_HELP_JA, FIELD_HELP_EN } from '../lib/fieldHelp'
+import {
+  explainBusinessQuality, explainCapitalEfficiency,
+  explainBalanceSheetSafety, explainCashGeneration,
+  type ScoreExplanation,
+} from '../lib/scoreExplainer'
 import type { TranslationKey } from '../lib/i18n'
 
 const EMPTY_INPUT: DataLaneInput = {
@@ -119,14 +125,67 @@ function TrendCard({ label, values, chronoLabels }: {
   )
 }
 
+// ── Field help panel ──────────────────────────────────────────────────────
+function HelpPanel({ field, lang }: { field: keyof DataLaneInput; lang: 'en' | 'ja' }) {
+  const help = lang === 'ja' ? FIELD_HELP_JA[field] : FIELD_HELP_EN[field]
+
+  return (
+    <div
+      data-help-panel="true"
+      style={{
+        position: 'absolute',
+        top: 20,
+        right: 0,
+        width: 280,
+        background: T.surface,
+        border: `1px solid ${T.cyan}44`,
+        borderLeft: `2px solid ${T.cyan}`,
+        padding: '12px 14px',
+        zIndex: 200,
+        boxShadow: `0 4px 16px rgba(0,0,0,0.4)`,
+        fontFamily: "'Courier New', monospace",
+      }}
+      // prevent outside-click from firing when clicking inside panel
+      onMouseDown={e => e.stopPropagation()}
+    >
+      <div style={{ color: T.cyan, fontSize: 9, letterSpacing: 3, marginBottom: 8, textTransform: 'uppercase' }}>
+        {field}
+      </div>
+      <div style={{ color: T.textMid, fontSize: 8, letterSpacing: 2, marginBottom: 3 }}>
+        {t('helpWhat', lang)}
+      </div>
+      <div style={{ color: T.text, fontSize: 11, lineHeight: 1.6, marginBottom: 8 }}>
+        {help.what}
+      </div>
+      <div style={{ color: T.textMid, fontSize: 8, letterSpacing: 2, marginBottom: 3 }}>
+        {t('helpFormula', lang)}
+      </div>
+      <div style={{ color: T.textDim, fontSize: 10, fontFamily: "'Courier New', monospace", lineHeight: 1.5, marginBottom: 8 }}>
+        {help.formula}
+      </div>
+      <div style={{ color: T.green, fontSize: 10, marginBottom: 4 }}>
+        {t('helpGood', lang)}: {help.good}
+      </div>
+      <div style={{ color: T.red, fontSize: 10, marginBottom: 6 }}>
+        {t('helpBad', lang)}: {help.bad}
+      </div>
+      <div style={{ color: T.yellow, fontSize: 10, lineHeight: 1.5 }}>
+        {t('helpTip', lang)} {help.tip}
+      </div>
+    </div>
+  )
+}
+
 // ── Preset form group ──────────────────────────────────────────────────────
-function PresetFormGroup({ group, preset, activeInput, prevInput, lang, updPeriod }: {
+function PresetFormGroup({ group, preset, activeInput, prevInput, lang, updPeriod, helpField, onToggleHelp }: {
   group: PresetFieldGroup
   preset: IndustryPreset
   activeInput: DataLaneInput
   prevInput: DataLaneInput | null
   lang: 'en' | 'ja'
   updPeriod: (key: keyof DataLaneInput) => (v: number | null) => void
+  helpField: keyof DataLaneInput | null
+  onToggleHelp: (field: keyof DataLaneInput) => void
 }) {
   const color = COLOR_MAP[group.color]
   return (
@@ -138,13 +197,61 @@ function PresetFormGroup({ group, preset, activeInput, prevInput, lang, updPerio
         const unit  = FIELD_UNITS[field]
         const ph    = FIELD_PLACEHOLDERS[field]
         const prevVal = prevInput?.[field] ?? null
+        const isHelpOpen = helpField === field
         return (
-          <div key={field} style={isHighlighted ? {
-            borderLeft: `2px solid ${color}`,
-            paddingLeft: 8,
-            marginLeft: -8,
-            marginBottom: 2,
-          } : {}}>
+          <div
+            key={field}
+            style={{
+              position: 'relative',
+              ...(isHighlighted ? {
+                borderLeft: `2px solid ${color}`,
+                paddingLeft: 8,
+                marginLeft: -8,
+                marginBottom: 2,
+              } : {}),
+            }}
+          >
+            {/* ? button */}
+            <button
+              type="button"
+              data-help-btn="true"
+              onClick={() => onToggleHelp(field)}
+              onMouseDown={e => e.stopPropagation()}
+              style={{
+                position: 'absolute',
+                top: 1,
+                right: 0,
+                width: 14,
+                height: 14,
+                background: 'transparent',
+                border: `1px solid ${isHelpOpen ? T.cyan : T.borderDim}`,
+                color: isHelpOpen ? T.cyan : T.textDim,
+                borderRadius: '50%',
+                fontSize: 9,
+                cursor: 'pointer',
+                lineHeight: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 0,
+                fontFamily: "'Courier New',monospace",
+                zIndex: 5,
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => {
+                ;(e.currentTarget as HTMLElement).style.borderColor = T.cyan
+                ;(e.currentTarget as HTMLElement).style.color = T.cyan
+              }}
+              onMouseLeave={e => {
+                if (!isHelpOpen) {
+                  ;(e.currentTarget as HTMLElement).style.borderColor = T.borderDim
+                  ;(e.currentTarget as HTMLElement).style.color = T.textDim
+                }
+              }}
+            >
+              ?
+            </button>
+
             <NumericInput
               label={isHighlighted ? `★ ${label}` : label}
               value={activeInput[field] as number | null}
@@ -153,6 +260,10 @@ function PresetFormGroup({ group, preset, activeInput, prevInput, lang, updPerio
               placeholder={ph}
               accent={isHighlighted ? color : T.textMid}
             />
+
+            {/* Help panel */}
+            {isHelpOpen && <HelpPanel field={field} lang={lang} />}
+
             {prevInput && (
               <div style={{ fontSize: 9, color: T.textDim, marginTop: -8, marginBottom: 8, fontFamily: "'Courier New', monospace" }}>
                 prev: {prevVal !== null ? `${prevVal}${unit}` : '—'}
@@ -282,6 +393,8 @@ export default function DataLanePage() {
   const [presetId, setPresetId] = useState<PresetId>('generic')
   const [presetAutoSet, setPresetAutoSet] = useState(false)
   const [csvPreview, setCsvPreview] = useState<ReturnType<typeof parseCSV> | null>(null)
+  const [helpField, setHelpField] = useState<keyof DataLaneInput | null>(null)
+  const [hoveredScore, setHoveredScore] = useState<keyof DataLaneScores | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fmpKey    = settings?.fmpApiKey ?? ''
@@ -309,6 +422,23 @@ export default function DataLanePage() {
     setPresetId(inferred)
     setPresetAutoSet(true)
   }, [company, presetAutoSet])
+
+  // Close help panel on outside click
+  useEffect(() => {
+    if (!helpField) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-help-panel]') && !target.closest('[data-help-btn]')) {
+        setHelpField(null)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [helpField])
+
+  const toggleHelp = useCallback((field: keyof DataLaneInput) => {
+    setHelpField(prev => prev === field ? null : field)
+  }, [])
 
   // ── Derived ─────────────────────────────────────────────────────────────
   const preset      = INDUSTRY_PRESETS[presetId]
@@ -578,18 +708,80 @@ export default function DataLanePage() {
 
         {/* ── Live scores ──────────────────────────────────────────────────── */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
-          {[
-            { label: 'Business Quality',     score: liveScores.businessQuality },
-            { label: 'Capital Efficiency',   score: liveScores.capitalEfficiency },
-            { label: 'Balance Sheet Safety', score: liveScores.balanceSheetSafety },
-            { label: 'Cash Generation',      score: liveScores.cashGeneration },
-          ].map(({ label, score }) => (
-            <div key={label} style={{
-              border: `1px solid ${scoreColor(score)}33`, padding: '14px 16px',
-              background: `rgba(${hexRgb(scoreColor(score))},0.05)`, textAlign: 'center',
-            }}>
+          {([
+            { label: 'Business Quality',     key: 'businessQuality'    as keyof DataLaneScores, score: liveScores.businessQuality,    explain: explainBusinessQuality(activeInput,    liveScores.businessQuality,    lang) },
+            { label: 'Capital Efficiency',   key: 'capitalEfficiency'  as keyof DataLaneScores, score: liveScores.capitalEfficiency,  explain: explainCapitalEfficiency(activeInput,  liveScores.capitalEfficiency,  lang) },
+            { label: 'Balance Sheet Safety', key: 'balanceSheetSafety' as keyof DataLaneScores, score: liveScores.balanceSheetSafety, explain: explainBalanceSheetSafety(activeInput, liveScores.balanceSheetSafety, lang) },
+            { label: 'Cash Generation',      key: 'cashGeneration'     as keyof DataLaneScores, score: liveScores.cashGeneration,     explain: explainCashGeneration(activeInput,     liveScores.cashGeneration,     lang) },
+          ] as { label: string; key: keyof DataLaneScores; score: number; explain: ScoreExplanation }[]).map(({ label, key, score, explain }, idx) => (
+            <div
+              key={label}
+              style={{
+                position: 'relative',
+                border: `1px solid ${scoreColor(score)}33`, padding: '14px 16px',
+                background: `rgba(${hexRgb(scoreColor(score))},0.05)`, textAlign: 'center',
+                cursor: 'default',
+              }}
+              onMouseEnter={() => setHoveredScore(key)}
+              onMouseLeave={() => setHoveredScore(null)}
+              onClick={() => setHoveredScore(prev => prev === key ? null : key)}
+            >
               <div style={{ color: T.textMid, fontSize: 9, letterSpacing: 2, marginBottom: 8 }}>{label}</div>
               <ScoreBadge score={score} />
+
+              {/* Tooltip */}
+              {hoveredScore === key && (
+                <div style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 6px)',
+                  ...(idx >= 2 ? { right: 0 } : { left: 0 }),
+                  width: 260,
+                  background: T.surface,
+                  border: `1px solid ${T.borderDim}`,
+                  borderLeft: `2px solid ${scoreColor(score)}`,
+                  padding: '12px 14px',
+                  zIndex: 300,
+                  textAlign: 'left',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                  fontFamily: "'Courier New', monospace",
+                }}
+                  onMouseEnter={() => setHoveredScore(key)}
+                >
+                  {/* Header */}
+                  <div style={{ color: T.textDim, fontSize: 9, letterSpacing: 2, marginBottom: 6, textTransform: 'uppercase' }}>
+                    {label} — {score}{t('scoreOutOfFive', lang)}
+                  </div>
+                  {/* Summary */}
+                  <div style={{ color: T.text, fontSize: 11, lineHeight: 1.6, marginBottom: 10 }}>
+                    {explain.summary}
+                  </div>
+                  {/* Reasons */}
+                  {explain.reasons.length === 0 ? (
+                    <div style={{ color: T.textDim, fontSize: 10 }}>{t('scoreNoData', lang)}</div>
+                  ) : (
+                    explain.reasons.map((r, i) => {
+                      const arrowColor = r.contribution === 'positive' ? T.green : r.contribution === 'negative' ? T.red : T.textDim
+                      const arrow = r.contribution === 'positive'
+                        ? t('scoreReasonPositive', lang)
+                        : r.contribution === 'negative'
+                          ? t('scoreReasonNegative', lang)
+                          : t('scoreReasonNeutral', lang)
+                      return (
+                        <div key={i} style={{ marginBottom: 6 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                            <span style={{ color: T.textDim, fontSize: 10, flex: 1 }}>{r.label}</span>
+                            <span style={{ color: T.text, fontSize: 11, fontFamily: "'Courier New', monospace" }}>{r.value}</span>
+                            <span style={{ color: arrowColor, fontSize: 12, minWidth: 12, textAlign: 'center' }}>{arrow}</span>
+                          </div>
+                          <div style={{ color: T.textDim, fontSize: 9, marginTop: 1, lineHeight: 1.4 }}>
+                            {r.note}
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -629,6 +821,8 @@ export default function DataLanePage() {
                 prevInput={prevInput}
                 lang={lang}
                 updPeriod={updPeriod}
+                helpField={helpField}
+                onToggleHelp={toggleHelp}
               />
             ))}
           </div>
@@ -642,6 +836,8 @@ export default function DataLanePage() {
                 prevInput={prevInput}
                 lang={lang}
                 updPeriod={updPeriod}
+                helpField={helpField}
+                onToggleHelp={toggleHelp}
               />
             ))}
           </div>
