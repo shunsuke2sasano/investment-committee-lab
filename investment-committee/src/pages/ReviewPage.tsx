@@ -179,6 +179,16 @@ export default function ReviewPage() {
                 ))}
               </div>
             )}
+
+            {/* Raw response (parse failure debug) */}
+            {report.missingItems[0] === 'AIレスポンスのパースに失敗しました。再実行してください。' && report.rawResponse && (
+              <div style={{ marginBottom: 24 }}>
+                <SectionHeader label="RAW RESPONSE (DEBUG)" color={T.textDim} />
+                <pre style={{ color: T.textDim, fontSize: 10, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-all', background: `rgba(255,255,255,0.03)`, padding: 12, border: `1px solid ${T.borderDim}` }}>
+                  {report.rawResponse}
+                </pre>
+              </div>
+            )}
           </>
         )}
       </PageLayout>

@@ -13,7 +13,7 @@ import type { ThesisAnalysis, VerdictReport, ThesisStatus } from '../types/domai
 import { isJapaneseStock, fetchFmpProfile } from '../lib/fmpClient'
 
 // Pipeline lanes that get completion badges (excludes Monitoring / Lessons)
-const PIPELINE_KEYS = ['thesis', 'data', 'market', 'review', 'valuation', 'verdict'] as const
+const PIPELINE_KEYS = ['thesis', 'data', 'market', 'valuation', 'review', 'verdict'] as const
 type PipelineKey = typeof PIPELINE_KEYS[number]
 
 export default function CompanyDetail() {
@@ -57,11 +57,12 @@ export default function CompanyDetail() {
     { key: 'thesis',     label: t('tab_thesis', lang),     color: T.purple, num: '①' },
     { key: 'data',       label: t('tab_data', lang),       color: T.yellow, num: '②' },
     { key: 'market',     label: t('tab_market', lang),     color: T.green,  num: '③' },
-    { key: 'review',     label: t('tab_review', lang),     color: T.red,    num: '④' },
-    { key: 'valuation',  label: t('tab_valuation', lang),  color: T.amber,  num: '⑤' },
+    { key: 'valuation',  label: t('tab_valuation', lang),  color: T.amber,  num: '④' },
+    { key: 'review',     label: t('tab_review', lang),     color: T.red,    num: '⑤' },
     { key: 'verdict',    label: t('tab_verdict', lang),    color: T.pink,   num: '⑥' },
-    { key: 'monitoring', label: t('tab_monitoring', lang), color: T.sky,    num: '⑦' },
-    { key: 'lessons',    label: t('tab_lessons', lang),    color: T.slate,  num: '⑧' },
+    { key: 'position',   label: t('tab_position', lang),   color: T.cyan,   num: '⑦' },
+    { key: 'monitoring', label: t('tab_monitoring', lang), color: T.sky,    num: '⑧' },
+    { key: 'lessons',    label: t('tab_lessons', lang),    color: T.slate,  num: '⑨' },
   ]
 
   useEffect(() => {

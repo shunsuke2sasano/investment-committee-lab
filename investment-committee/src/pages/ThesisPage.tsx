@@ -37,7 +37,7 @@ export default function ThesisPage() {
 
   const [thesis, setThesis] = useState<ThesisAnalysis | null>(null)
   const [thesisText, setThesisText] = useState('')
-  const [drivers, setDrivers] = useState<string[]>(['', '', ''])
+  const [drivers, setDrivers] = useState<string[]>([''])
   const [conditions, setConditions] = useState<CollapseCondition[]>([emptyCondition()])
   const [confidenceNote, setConfidenceNote] = useState('')
   const [valuationOptimalMonths, setValuationOptimalMonths] = useState<number | null>(null)
@@ -60,7 +60,7 @@ export default function ThesisPage() {
       if (t) {
         setThesis(t)
         setThesisText(t.thesisText)
-        setDrivers(t.drivers.length > 0 ? t.drivers : ['', '', ''])
+        setDrivers(t.drivers.length > 0 ? t.drivers : [''])
         setConditions(t.collapseConditions.length > 0
           ? t.collapseConditions.map(c => ({
               ...c,
@@ -213,12 +213,8 @@ export default function ThesisPage() {
     if (hasExisting && !confirm(t('thesisGuideOverwrite', lang))) return
 
     setThesisText(guideDraft.thesisText)
-    setDrivers([
-      guideDraft.drivers[0] ?? '',
-      guideDraft.drivers[1] ?? '',
-      guideDraft.drivers[2] ?? '',
-    ])
-    setConditions(guideDraft.collapseConditions.slice(0, 3).map(cc => ({
+    setDrivers(guideDraft.drivers.length > 0 ? guideDraft.drivers : [''])
+    setConditions(guideDraft.collapseConditions.map(cc => ({
       id: uid(),
       label: cc.label,
       note: cc.note,
@@ -266,14 +262,39 @@ export default function ThesisPage() {
 
         <SectionHeader label={t('driversLabel', lang)} color={T.purple} />
         {drivers.map((d, i) => (
-          <Input key={i}
-            label={`Driver ${i + 1}`}
-            value={d}
-            onChange={v => setDrivers(p => { const n = [...p]; n[i] = v; return n })}
-            placeholder={['CUDA ecosystem switching cost', 'Structural growth in data center demand', 'Software business expansion'][i]}
-            accent={T.purple}
-          />
+          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <div style={{ flex: 1 }}>
+              <Input
+                label={`Driver ${i + 1}`}
+                value={d}
+                onChange={v => setDrivers(p => { const n = [...p]; n[i] = v; return n })}
+                placeholder={['CUDA ecosystem switching cost', 'Structural growth in data center demand', 'Software business expansion'][i] ?? ''}
+                accent={T.purple}
+              />
+            </div>
+            {drivers.length > 1 && (
+              <button
+                onClick={() => setDrivers(p => p.filter((_, idx) => idx !== i))}
+                style={{
+                  marginTop: 22, background: 'transparent', border: 'none',
+                  color: T.textDim, cursor: 'pointer', fontSize: 12, padding: '4px 6px',
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
         ))}
+        {drivers.length < 5 && (
+          <Button
+            onClick={() => setDrivers(p => [...p, ''])}
+            variant="ghost"
+            size="sm"
+            accent={T.purple}
+          >
+            {t('addDriver', lang)}
+          </Button>
+        )}
 
         {/* ── Collapse Conditions ──────────────────────────────────────── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, marginTop: 8 }}>
@@ -463,7 +484,7 @@ export default function ThesisPage() {
                 {/* Drivers */}
                 <div style={{ marginBottom: 18 }}>
                   <div style={{ color: T.purple, fontSize: 9, letterSpacing: 3, marginBottom: 8 }}>
-                    ▼ {lang === 'ja' ? 'ドライバー（3つ）' : 'DRIVERS'}
+                    ▼ {lang === 'ja' ? 'ドライバー' : 'DRIVERS'}
                   </div>
                   {guideDraft.drivers.map((d, i) => (
                     <div key={i} style={{
@@ -479,7 +500,7 @@ export default function ThesisPage() {
                 {/* Collapse conditions */}
                 <div style={{ marginBottom: 18 }}>
                   <div style={{ color: T.red, fontSize: 9, letterSpacing: 3, marginBottom: 8 }}>
-                    ▼ {lang === 'ja' ? '崩壊条件（3つ）' : 'COLLAPSE CONDITIONS'}
+                    ▼ {lang === 'ja' ? '崩壊条件' : 'COLLAPSE CONDITIONS'}
                   </div>
                   {guideDraft.collapseConditions.map((cc, i) => (
                     <div key={i} style={{

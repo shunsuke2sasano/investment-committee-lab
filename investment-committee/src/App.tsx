@@ -18,6 +18,7 @@ const ReviewPage     = React.lazy(() => import('./pages/ReviewPage'))
 const ValuationPage  = React.lazy(() => import('./pages/ValuationPage'))
 const VerdictPage    = React.lazy(() => import('./pages/VerdictPage'))
 const MonitoringPage = React.lazy(() => import('./pages/MonitoringPage'))
+const PositionPage   = React.lazy(() => import('./pages/PositionPage'))
 const LessonPage     = React.lazy(() => import('./pages/LessonPage'))
 const MetricsPage    = React.lazy(() => import('./pages/MetricsPage'))
 const SettingsPage   = React.lazy(() => import('./pages/SettingsPage'))
@@ -219,6 +220,7 @@ export default function App() {
             <Route path="/companies/:id/review"     element={<ReviewPage />} />
             <Route path="/companies/:id/valuation"  element={<ValuationPage />} />
             <Route path="/companies/:id/verdict"    element={<VerdictPage />} />
+            <Route path="/companies/:id/position"   element={<PositionPage />} />
             <Route path="/companies/:id/monitoring" element={<MonitoringPage />} />
             <Route path="/companies/:id/lessons"    element={<LessonPage />} />
             <Route path="/portfolio"                element={<PortfolioPage />} />

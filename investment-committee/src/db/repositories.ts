@@ -2,7 +2,7 @@ import { db } from './schema'
 import type {
   CompanyCase, ThesisAnalysis, DataAnalysis, MarketAnalysis,
   ReviewReport, ValuationReport, VerdictReport, MonitoringPlan,
-  LessonRecord, AppSettings,
+  LessonRecord, AppSettings, PositionRecord,
 } from '../types/domain'
 import { encrypt as cryptoEncrypt, decrypt as cryptoDecrypt } from '../lib/crypto'
 import { isEncryptionActive, getActiveCryptoKey, notifyDecryptError } from '../lib/cryptoContext'
@@ -35,6 +35,7 @@ const PLAIN = {
   verdict:   ['companyId', 'createdAt'],
   monitor:   ['companyId', 'updatedAt', 'createdAt'],
   lesson:    ['companyId', 'ticker', 'phase', 'createdAt', 'updatedAt'],
+  position:  ['companyId', 'status', 'createdAt', 'updatedAt'],
 } as const satisfies Record<string, readonly string[]>
 
 async function encRow<T extends { id: string }>(
@@ -122,6 +123,7 @@ export const companyRepository = {
       db.verdict_reports.where('companyId').equals(id).delete(),
       db.monitoring_plans.where('companyId').equals(id).delete(),
       db.lesson_records.where('companyId').equals(id).delete(),
+      db.position_records.where('companyId').equals(id).delete(),
     ])
     await db.companies.delete(id)
   },
@@ -321,6 +323,25 @@ export const lessonRepository = {
   },
 }
 
+// ── Position ──────────────────────────────────────────────────────────────
+export const positionRepository = {
+  async get(companyId: string): Promise<PositionRecord | undefined> {
+    const raw = await db.position_records.where('companyId').equals(companyId).first()
+    return decRow<PositionRecord>(raw)
+  },
+  async save(input: Omit<PositionRecord, 'id' | 'createdAt' | 'updatedAt'>): Promise<PositionRecord> {
+    const existing = await positionRepository.get(input.companyId)
+    if (existing) {
+      const merged: PositionRecord = { ...existing, ...input, updatedAt: now() }
+      await db.position_records.put(await encRow(merged, PLAIN.position))
+      return merged
+    }
+    const row: PositionRecord = { ...input, id: uid(), createdAt: now(), updatedAt: now() }
+    await db.position_records.add(await encRow(row, PLAIN.position))
+    return row
+  },
+}
+
 // ── Decrypt-all (for disabling encryption) ────────────────────────────────
 // Reads every table, decrypts any encrypted records, and writes them back
 // as plain objects (no _enc field). Must be called while the key is still
@@ -349,6 +370,7 @@ export async function decryptAllAndStrip(): Promise<void> {
     stripTable(db.verdict_reports),
     stripTable(db.monitoring_plans),
     stripTable(db.lesson_records),
+    stripTable(db.position_records),
   ])
 }
 
@@ -372,7 +394,7 @@ export const exportImport = {
   async exportAll(): Promise<string> {
     const [
       companies, theses, dataAnalyses, marketAnalyses,
-      reviews, valuations, verdicts, monitorings, lessons, settings
+      reviews, valuations, verdicts, monitorings, lessons, settings, positions
     ] = await Promise.all([
       db.companies.toArray(),
       db.thesis_analyses.toArray(),
@@ -384,12 +406,13 @@ export const exportImport = {
       db.monitoring_plans.toArray(),
       db.lesson_records.toArray(),
       db.app_settings.toArray(),
+      db.position_records.toArray(),
     ])
     return JSON.stringify({
       exportedAt: new Date().toISOString(),
       version: 1,
       companies, theses, dataAnalyses, marketAnalyses,
-      reviews, valuations, verdicts, monitorings, lessons, settings,
+      reviews, valuations, verdicts, monitorings, lessons, settings, positions,
     }, null, 2)
   },
 
@@ -398,7 +421,7 @@ export const exportImport = {
     await db.transaction('rw', [
       db.companies, db.thesis_analyses, db.data_analyses, db.market_analyses,
       db.review_reports, db.valuation_reports, db.verdict_reports,
-      db.monitoring_plans, db.lesson_records, db.app_settings,
+      db.monitoring_plans, db.lesson_records, db.app_settings, db.position_records,
     ], async () => {
       await Promise.all([
         db.companies.bulkPut(data.companies ?? []),
@@ -411,6 +434,7 @@ export const exportImport = {
         db.monitoring_plans.bulkPut(data.monitorings ?? []),
         db.lesson_records.bulkPut(data.lessons ?? []),
         db.app_settings.bulkPut(data.settings ?? []),
+        db.position_records.bulkPut(data.positions ?? []),
       ])
     })
   },

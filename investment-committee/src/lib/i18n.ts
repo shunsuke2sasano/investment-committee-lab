@@ -88,6 +88,7 @@ export const translations = {
   tab_verdict: { en: 'Verdict', ja: 'バーディクト' },
   tab_monitoring: { en: 'Monitoring', ja: 'モニタリング' },
   tab_lessons: { en: 'Lessons', ja: 'レッスン' },
+  tab_position: { en: 'POSITION', ja: 'ポジション' },
 
   // ── Thesis ───────────────────────────────────────────────────────────────
   thesisTitle: { en: 'THESIS LANE', ja: 'THESIS レーン' },
@@ -102,7 +103,7 @@ export const translations = {
     en: 'Nvidia owns the OS of AI infrastructure through CUDA, giving it software-level pricing power and a 10+ year moat',
     ja: 'NvidiaはCUDAというAIインフラのOSを通じて、ソフトウェアレベルの価格決定権と10年以上のモートを持つ',
   },
-  driversLabel: { en: 'DRIVERS (3 supporting reasons)', ja: 'ドライバー（仮説を支える3つの根拠）' },
+  driversLabel: { en: 'DRIVERS', ja: 'ドライバー（仮説を支える根拠）' },
   collapseLabel: { en: 'COLLAPSE CONDITIONS', ja: 'Thesis崩壊条件' },
   collapseNote: {
     en: 'Define specific conditions that would invalidate this thesis. Numbers preferred over qualitative.',
@@ -113,6 +114,7 @@ export const translations = {
   operator: { en: 'Operator', ja: '演算子' },
   threshold: { en: 'Threshold', ja: '閾値（数値）' },
   unit: { en: 'Unit', ja: '単位' },
+  addDriver:    { en: '+ Add Driver',    ja: '+ ドライバーを追加' },
   addCondition: { en: '+ ADD CONDITION', ja: '+ 条件を追加' },
   removeBtn: { en: 'REMOVE', ja: '削除' },
   confidenceNote: { en: 'CONFIDENCE NOTE', ja: '確信度メモ' },
@@ -232,6 +234,11 @@ export const translations = {
   rationaleLabel: { en: 'RATIONALE', ja: '判断根拠' },
   rationaleInputLabel: { en: 'Why this verdict?', ja: '最終判断の根拠（なぜこのVerdictか）' },
   saveVerdict: { en: 'SAVE VERDICT', ja: 'バーディクトを保存' },
+  verdictAiBtn:        { en: 'AI SCORE',          ja: 'AIで採点する' },
+  verdictAiGenerating: { en: 'Generating…',        ja: '生成中…' },
+  verdictAiSuccess:    { en: 'AI scoring complete. Please review and adjust.', ja: 'AI採点が完了しました。内容を確認・調整してください。' },
+  verdictAiOverwrite:  { en: 'Existing scores will be overwritten. Continue?', ja: '既存のスコアが上書きされます。続行しますか？' },
+  verdictAiNoKey:      { en: 'Set Anthropic API key in Settings first', ja: 'SettingsでAnthropicのAPIキーを先に設定してください' },
   feedApplyAll: { en: 'APPLY ALL SUGGESTIONS', ja: '候補を一括適用' },
   feedApply: { en: 'Apply', ja: '適用' },
   feedFromDataLane: { en: '← Data Lane', ja: '← Data Lane' },
@@ -430,6 +437,15 @@ export const translations = {
   thesisGuideError:           { en: 'Generation failed. Please try again.', ja: '生成に失敗しました。もう一度お試しください。' },
   thesisGuideGenerating:      { en: 'Generating…',                ja: '生成中…' },
 
+  // ── Verdict style selector ────────────────────────────────────────────────
+  styleSelectLabel:  { en: 'INVESTMENT STYLE',            ja: '投資スタイル' },
+  styleSelected:     { en: 'Selected',                    ja: '選択中' },
+  styleReviewBtn:     { en: 'Review from this perspective', ja: 'この視点でレビュー' },
+  styleReviewAllBtn:  { en: 'Review from all styles',       ja: '全スタイルで一括レビュー' },
+  styleReviewLoading: { en: 'Generating…',                  ja: '生成中…' },
+  styleScored:        { en: '✓ scored',                     ja: '✓ 採点済み' },
+  styleAxesApplied:   { en: 'Axes updated for this style',  ja: 'このスタイルのスコアを反映しました' },
+
   // ── Portfolio ─────────────────────────────────────────────────────────────
   portfolioTitle:      { en: 'PORTFOLIO VIEW',       ja: 'ポートフォリオ' },
   portfolioSubtitle:   { en: 'ALL CASES OVERVIEW',   ja: '全ケース概覧' },
@@ -448,6 +464,28 @@ export const translations = {
   portfolioColAxes:    { en: 'AXES',                 ja: '8軸' },
   portfolioNoVerdict:  { en: 'No verdict',           ja: 'Verdict未作成' },
   nav_portfolio:       { en: 'PORTFOLIO',            ja: 'ポートフォリオ' },
+
+  // ── Position ──────────────────────────────────────────────────────────────
+  positionTitle:         { en: 'POSITION',          ja: '保有管理' },
+  positionStatus:        { en: 'STATUS',            ja: 'ステータス' },
+  positionWatching:      { en: 'WATCHING',          ja: 'ウォッチ中' },
+  positionHolding:       { en: 'HOLDING',           ja: '保有中' },
+  positionSold:          { en: 'SOLD',              ja: '売却済み' },
+  positionEntryDate:     { en: 'Entry Date',        ja: '購入日' },
+  positionEntryPrice:    { en: 'Entry Price',       ja: '購入単価' },
+  positionShares:        { en: 'Shares',            ja: '保有株数' },
+  positionCurrency:      { en: 'Currency',          ja: '通貨' },
+  positionEntryEv:       { en: 'Entry EV/EBITDA',   ja: '購入時EV/EBITDA' },
+  positionCurrentPrice:  { en: 'Current Price',     ja: '現在株価' },
+  positionUnrealizedPnl: { en: 'Unrealized P&L',   ja: '含み損益' },
+  positionHoldingPeriod: { en: 'Holding Period',    ja: '保有期間' },
+  positionInvestment:    { en: 'Investment',        ja: '投資金額' },
+  positionExitDate:      { en: 'Exit Date',         ja: '売却日' },
+  positionExitPrice:     { en: 'Exit Price',        ja: '売却単価' },
+  positionRealizedPnl:   { en: 'Realized P&L',     ja: '確定損益' },
+  positionNote:          { en: 'Note',              ja: 'メモ' },
+  positionSave:          { en: 'SAVE POSITION',     ja: 'ポジションを保存' },
+  positionMonths:        { en: 'mo',                ja: 'ヶ月' },
 
   // ── CSV Import / Export ────────────────────────────────────────────────────
   csvImportBtn:      { en: 'IMPORT CSV',              ja: 'CSVインポート' },

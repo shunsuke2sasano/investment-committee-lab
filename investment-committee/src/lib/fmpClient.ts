@@ -3,6 +3,8 @@
 // US stocks only. Japanese stocks are skipped.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { FMP_BASE_URL } from './constants'
+
 /** Returns true if the ticker looks like a Japanese stock (4-digit code or ends with .T) */
 export function isJapaneseStock(ticker: string): boolean {
   const t = ticker.trim().toUpperCase()
@@ -58,7 +60,7 @@ interface FmpKeyMetricsItem {
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────
 
-const BASE = 'https://financialmodelingprep.com/api/v3'
+const BASE = FMP_BASE_URL
 
 async function fmpGet<T>(path: string): Promise<T[]> {
   const res = await fetch(`${BASE}${path}`)
@@ -71,25 +73,25 @@ async function fmpGet<T>(path: string): Promise<T[]> {
 // ── Public API ────────────────────────────────────────────────────────────
 
 export async function fetchFmpProfile(ticker: string, apiKey: string): Promise<FmpProfileData> {
-  const items = await fmpGet<any>(`/profile/${ticker}?apikey=${apiKey}`)
+  const items = await fmpGet<any>(`/profile?symbol=${ticker}&apikey=${apiKey}`)
   if (items.length === 0) throw new Error('No profile data returned')
   const d = items[0]
   return {
     price:             typeof d.price === 'number' ? d.price : null,
-    mktCap:            typeof d.mktCap === 'number' ? d.mktCap / 1e6 : null,         // → $M
+    mktCap:            typeof d.marketCap === 'number' ? d.marketCap / 1e6 : null,         // → $M
     enterpriseValue:   typeof d.enterpriseValue === 'number' ? d.enterpriseValue / 1e6 : null, // → $M
     sector:            d.sector || null,
     companyName:       d.companyName || null,
     currency:          d.currency || null,
-    exchangeShortName: d.exchangeShortName || null,
+    exchangeShortName: d.exchange || null,
   }
 }
 
 export async function fetchFmpFinancials(ticker: string, apiKey: string): Promise<FmpFinancialData> {
   const [income, cashflow, keyMetrics] = await Promise.all([
-    fmpGet<FmpIncomeItem>(`/income-statement/${ticker}?limit=4&apikey=${apiKey}`),
-    fmpGet<FmpCashFlowItem>(`/cash-flow-statement/${ticker}?limit=4&apikey=${apiKey}`),
-    fmpGet<FmpKeyMetricsItem>(`/key-metrics/${ticker}?limit=4&apikey=${apiKey}`),
+    fmpGet<FmpIncomeItem>(`/income-statement?symbol=${ticker}&limit=4&apikey=${apiKey}`),
+    fmpGet<FmpCashFlowItem>(`/cash-flow-statement?symbol=${ticker}&limit=4&apikey=${apiKey}`),
+    fmpGet<FmpKeyMetricsItem>(`/key-metrics?symbol=${ticker}&limit=4&apikey=${apiKey}`),
   ])
 
   const inc0 = income[0]

@@ -1,5 +1,6 @@
-import type { ThesisAnalysis, DataAnalysis, MarketAnalysis, ValuationReport, ReviewReport, ReviewRisk, ReviewMismatch } from '../../types/domain'
+﻿import type { ThesisAnalysis, DataAnalysis, MarketAnalysis, ValuationReport, ReviewReport, ReviewRisk, ReviewMismatch } from '../../types/domain'
 import { settingsRepository } from '../../db/repositories'
+import { CLAUDE_MODEL, ANTHROPIC_API_VERSION } from '../../lib/constants'
 
 // ── Payload ───────────────────────────────────────────────────────────────
 interface ReviewPayload {
@@ -54,7 +55,15 @@ const SYSTEM_PROMPT = `あなたは投資分析の構造的査読者（Structure
     }
   ],
   "scenarioNotes": ["シナリオ展開のコメント"]
-}`
+}
+
+出力の制限（必ず守ること）:
+- missingItems: 最大5件（最重要のみ）
+- mismatches: 最大3件（最重要のみ）
+- risks: 最大5件（severity 3以上のみ）
+- scenarioNotes: 最大3件
+- 各 detail は100文字以内で簡潔に
+- 根拠となる数字は必ず含めるが、説明は短くする`
 
 // ── Prompt builder ────────────────────────────────────────────────────────
 function buildPrompt(payload: ReviewPayload): string {
@@ -139,31 +148,50 @@ async function callClaude(system: string, user: string): Promise<string> {
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      'anthropic-version': ANTHROPIC_API_VERSION,
       'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
+      model: CLAUDE_MODEL,
+      max_tokens: 3000,
       system,
       messages: [{ role: 'user', content: user }],
     }),
   })
   const data = await res.json()
+  console.log('API RESPONSE STATUS:', res.status)
+  console.log('API RESPONSE DATA:', JSON.stringify(data, null, 2))
   if (data.error) throw new Error(data.error.message)
   return data.content?.[0]?.text ?? ''
 }
 
 // ── Parse ─────────────────────────────────────────────────────────────────
-function parseResponse(raw: string): ReviewEngineOutput {
-  const cleaned = raw.replace(/```json|```/g, '').trim()
-  const parsed = JSON.parse(cleaned) as ReviewEngineOutput
-  // Validate minimal structure
-  if (!Array.isArray(parsed.missingItems)) parsed.missingItems = []
-  if (!Array.isArray(parsed.mismatches))   parsed.mismatches = []
-  if (!Array.isArray(parsed.risks))        parsed.risks = []
+function normalizeOutput(parsed: any): ReviewEngineOutput {
+  if (!Array.isArray(parsed.missingItems))  parsed.missingItems = []
+  if (!Array.isArray(parsed.mismatches))    parsed.mismatches = []
+  if (!Array.isArray(parsed.risks))         parsed.risks = []
   if (!Array.isArray(parsed.scenarioNotes)) parsed.scenarioNotes = []
-  return parsed
+  return parsed as ReviewEngineOutput
+}
+
+function parseResponse(raw: string): ReviewEngineOutput {
+  // 1. try direct parse
+  try { return normalizeOutput(JSON.parse(raw.trim())) } catch {}
+
+  // 2. strip markdown fences, try again
+  try {
+    const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+    return normalizeOutput(JSON.parse(cleaned))
+  } catch {}
+
+  // 3. extract first '{' to last '}' (handles preamble/postamble with nested braces)
+  const start = raw.indexOf('{')
+  const end   = raw.lastIndexOf('}')
+  if (start !== -1 && end > start) {
+    return normalizeOutput(JSON.parse(raw.slice(start, end + 1)))
+  }
+
+  throw new Error('JSON parse failed — no valid JSON object found')
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────
@@ -174,12 +202,13 @@ export async function runReviewEngine(payload: ReviewPayload): Promise<Omit<Revi
   let output: ReviewEngineOutput
   try {
     output = parseResponse(raw)
-  } catch {
-    // Parse failure: save raw and return empty structure
+  } catch (parseErr) {
+    console.error('[ReviewEngine] parse failed:', parseErr)
+    console.log('[ReviewEngine] RAW RESPONSE:', raw)
     return {
       companyId: payload.company.ticker,
       provider: 'anthropic',
-      model: 'claude-sonnet-4-20250514',
+      model: CLAUDE_MODEL,
       missingItems: ['AIレスポンスのパースに失敗しました。再実行してください。'],
       mismatches: [],
       risks: [],
@@ -192,7 +221,7 @@ export async function runReviewEngine(payload: ReviewPayload): Promise<Omit<Revi
   return {
     companyId: payload.company.ticker,
     provider: 'anthropic',
-    model: 'claude-sonnet-4-20250514',
+    model: CLAUDE_MODEL,
     missingItems: output.missingItems,
     mismatches: output.mismatches as ReviewMismatch[],
     risks: output.risks as ReviewRisk[],

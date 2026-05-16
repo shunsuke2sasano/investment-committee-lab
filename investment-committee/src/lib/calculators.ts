@@ -247,10 +247,19 @@ export function calculateValuation(assumptions: ValuationAssumptions) {
 export function calculateVerdict(
   axisScores: VerdictAxes,
   profile: VerdictProfile,
+  weights?: Partial<Record<keyof VerdictAxes, number>>,
 ): { totalScore: number; vetoCount: number; verdict: VerdictResult } {
-  const axes = Object.values(axisScores) as { score: number; veto: boolean }[]
-  const totalScore = axes.reduce((sum, a) => sum + a.score, 0)
-  const vetoCount  = axes.filter(a => a.veto).length
+  const axisEntries = Object.entries(axisScores) as [keyof VerdictAxes, { score: number; veto: boolean }][]
+
+  let totalScore: number
+  if (weights) {
+    const weightedSum = axisEntries.reduce((sum, [key, a]) => sum + a.score * (weights[key] ?? 1.0), 0)
+    const sumWeights  = axisEntries.reduce((sum, [key])   => sum + (weights[key] ?? 1.0), 0)
+    totalScore = Math.round((weightedSum / sumWeights) * axisEntries.length)
+  } else {
+    totalScore = axisEntries.reduce((sum, [, a]) => sum + a.score, 0)
+  }
+  const vetoCount = axisEntries.filter(([, a]) => a.veto).length
 
   let verdict: VerdictResult
 

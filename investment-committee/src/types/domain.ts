@@ -17,6 +17,7 @@ export interface CompanyCase {
   status: CaseStatus
   createdAt: string
   updatedAt: string
+  dataPresetId?: string
 }
 
 // ── Thesis ───────────────────────────────────────────────────────────────
@@ -116,6 +117,7 @@ export interface DataAnalysis {
   summary: string
   computedAt: string
   periods?: FiscalPeriodData[]  // multi-period data; undefined = legacy single-period
+  presetId?: string
 }
 
 // ── Market Lane ──────────────────────────────────────────────────────────
@@ -368,6 +370,31 @@ export interface MetricSnapshot {
   watchConversionRate: number | null   // WATCHがBUYに昇格した割合
   portfolioAlpha: number | null
   createdAt: string
+}
+
+// ── Position（保有管理）──────────────────────────────────────────────────
+export type PositionStatus = 'watching' | 'holding' | 'sold'
+
+export interface PositionRecord {
+  id: string
+  companyId: string
+  status: PositionStatus
+
+  entryDate: string | null
+  entryPrice: number | null
+  shares: number | null
+  entryCurrency: 'USD' | 'JPY'
+
+  entryEvEbitda: number | null
+  entryVerdict: 'BUY' | 'WATCH' | 'PASS' | null
+
+  exitDate: string | null
+  exitPrice: number | null
+
+  note: string | null
+
+  createdAt: string
+  updatedAt: string
 }
 
 // ── App Settings ─────────────────────────────────────────────────────────

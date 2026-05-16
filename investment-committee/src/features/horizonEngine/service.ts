@@ -1,5 +1,6 @@
-import type { CollapseCondition, TimeToValidate } from '../../types/domain'
+﻿import type { CollapseCondition, TimeToValidate } from '../../types/domain'
 import { settingsRepository } from '../../db/repositories'
+import { CLAUDE_MODEL, ANTHROPIC_API_VERSION } from '../../lib/constants'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AI HORIZON ESTIMATOR
@@ -81,11 +82,11 @@ ${JSON.stringify(payload, null, 2)}`
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      'anthropic-version': ANTHROPIC_API_VERSION,
       'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: CLAUDE_MODEL,
       max_tokens: 1000,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
@@ -162,11 +163,11 @@ Valuation optimal: ${params.valuationOptimalMonths ? `${params.valuationOptimalM
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      'anthropic-version': ANTHROPIC_API_VERSION,
       'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: CLAUDE_MODEL,
       max_tokens: 300,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],

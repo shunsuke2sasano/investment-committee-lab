@@ -1,10 +1,11 @@
-import { settingsRepository } from '../../db/repositories'
+﻿import { settingsRepository } from '../../db/repositories'
+import { CLAUDE_MODEL, ANTHROPIC_API_VERSION } from '../../lib/constants'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 export interface ThesisGuideDraft {
   thesisText: string
-  drivers: string[]                               // 3件
-  collapseConditions: { label: string; note: string }[]  // 3件
+  drivers: string[]
+  collapseConditions: { label: string; note: string }[]
 }
 
 // ── API helpers (same pattern as reviewEngine/service.ts) ──────────────────
@@ -21,13 +22,15 @@ const SYSTEM_PROMPT = `あなたは株式投資のThesis作成を助けるアシ
 以下のJSON形式のみで回答してください（前置き・後置き・マークダウン不要）:
 {
   "thesisText": "1行の投資仮説（なぜこの会社が市場に勝つか）",
-  "drivers": ["仮説を支える根拠1", "根拠2", "根拠3"],
+  "drivers": ["仮説を支える根拠1（3〜5個）", "根拠2", "根拠3"],
   "collapseConditions": [
-    { "label": "崩壊条件の短いラベル", "note": "具体的な説明" },
+    { "label": "崩壊条件の短いラベル（3〜5個）", "note": "具体的な説明" },
     { "label": "崩壊条件の短いラベル", "note": "具体的な説明" },
     { "label": "崩壊条件の短いラベル", "note": "具体的な説明" }
   ]
-}`
+}
+
+driversとcollapseConditionsはそれぞれ3〜5個生成してください。重要なものほど上に配置してください。`
 
 // ── Main ──────────────────────────────────────────────────────────────────
 export async function generateThesisDraft(
@@ -54,11 +57,11 @@ ticker・会社名・セクターの情報だけで推測して生成してく�
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      'anthropic-version': ANTHROPIC_API_VERSION,
       'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: CLAUDE_MODEL,
       max_tokens: 1000,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],

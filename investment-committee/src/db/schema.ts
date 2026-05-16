@@ -11,6 +11,7 @@ import type {
   LessonRecord,
   MetricSnapshot,
   AppSettings,
+  PositionRecord,
 } from '../types/domain'
 
 export class InvestmentCommitteeDB extends Dexie {
@@ -25,6 +26,7 @@ export class InvestmentCommitteeDB extends Dexie {
   lesson_records!: Table<LessonRecord>
   metric_snapshots!: Table<MetricSnapshot>
   app_settings!: Table<AppSettings>
+  position_records!: Table<PositionRecord>
 
   constructor() {
     super('InvestmentCommitteeDB')
@@ -99,6 +101,22 @@ export class InvestmentCommitteeDB extends Dexie {
         if (record.fmpApiKey === undefined) record.fmpApiKey = null
       })
     )
+
+    // v5: add position_records table
+    this.version(5).stores({
+      companies:         'id, ticker, status, updatedAt',
+      thesis_analyses:   'id, companyId, version, updatedAt',
+      data_analyses:     'id, companyId, computedAt',
+      market_analyses:   'id, companyId, computedAt',
+      review_reports:    'id, companyId, createdAt',
+      valuation_reports: 'id, companyId, createdAt',
+      verdict_reports:   'id, companyId, createdAt',
+      monitoring_plans:  'id, companyId, updatedAt',
+      lesson_records:    'id, companyId, ticker, phase, createdAt',
+      metric_snapshots:  'id, asOfDate',
+      app_settings:      'id',
+      position_records:  'id, companyId, status, createdAt',
+    })
   }
 }
 

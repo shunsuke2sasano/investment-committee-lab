@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { T, NumericInput, Button, PageLayout, SectionHeader, ScoreBadge, Select, hexRgb } from '../components/common/ui'
 import { useStore } from '../state/store'
 import { t } from '../lib/i18n'
-import { dataAnalysisRepository } from '../db/repositories'
+import { dataAnalysisRepository, companyRepository } from '../db/repositories'
 import { calculateDataScores, buildDataSummary, calculateYoY, detectTrend } from '../lib/calculators'
 import type { DataLaneInput, DataLaneScores, DataAnalysis, FiscalPeriodData } from '../types/domain'
 import { isJapaneseStock, fetchFmpFinancials } from '../lib/fmpClient'
@@ -380,7 +380,7 @@ export default function DataLanePage() {
   const { id: companyId } = useParams<{ id: string }>()
   const companies = useStore(s => s.companies)
   const company = companies.find(c => c.id === companyId)
-  const { showToast, lang, settings } = useStore()
+  const { showToast, lang, settings, upsertCompany } = useStore()
 
   const [periods, setPeriods] = useState<FiscalPeriodData[]>([
     { fiscalYear: defaultFiscalYear(), input: { ...EMPTY_INPUT } },
@@ -391,7 +391,7 @@ export default function DataLanePage() {
   const [fmpLoading, setFmpLoading] = useState(false)
   const [editingYearIdx, setEditingYearIdx] = useState<number | null>(null)
   const [presetId, setPresetId] = useState<PresetId>('generic')
-  const [presetAutoSet, setPresetAutoSet] = useState(false)
+  const [presetFromSector, setPresetFromSector] = useState(false)
   const [csvPreview, setCsvPreview] = useState<ReturnType<typeof parseCSV> | null>(null)
   const [helpField, setHelpField] = useState<keyof DataLaneInput | null>(null)
   const [hoveredScore, setHoveredScore] = useState<keyof DataLaneScores | null>(null)
@@ -400,7 +400,19 @@ export default function DataLanePage() {
   const fmpKey    = settings?.fmpApiKey ?? ''
   const hasFmpKey = fmpKey.trim().length > 0
 
-  // ── Load ────────────────────────────────────────────────────────────────
+  // ── Preset init from CompanyCase (synchronous, no race condition) ─────────
+  useEffect(() => {
+    if (!company) return
+    if (company.dataPresetId) {
+      setPresetId(company.dataPresetId as PresetId)
+      setPresetFromSector(false)
+    } else {
+      setPresetId(inferPresetFromSector(company.sector))
+      setPresetFromSector(!!company.sector)
+    }
+  }, [company?.id])  // re-run only when navigating to a different company
+
+  // ── Load periods from DataAnalysis ────────────────────────────────────────
   useEffect(() => {
     if (!companyId) return
     dataAnalysisRepository.getLatest(companyId).then(d => {
@@ -414,14 +426,6 @@ export default function DataLanePage() {
       setActivePeriodIdx(0)
     })
   }, [companyId])
-
-  // Auto-infer preset from sector (runs once when company loads)
-  useEffect(() => {
-    if (!company || presetAutoSet) return
-    const inferred = inferPresetFromSector(company.sector)
-    setPresetId(inferred)
-    setPresetAutoSet(true)
-  }, [company, presetAutoSet])
 
   // Close help panel on outside click
   useEffect(() => {
@@ -509,6 +513,14 @@ export default function DataLanePage() {
     setFmpLoading(false)
   }
 
+  async function handlePresetChange(newId: PresetId) {
+    setPresetId(newId)
+    setPresetFromSector(false)
+    if (!companyId) return
+    const updated = await companyRepository.update(companyId, { dataPresetId: newId })
+    if (updated) upsertCompany(updated)
+  }
+
   async function handleSave() {
     if (!companyId) return
     setLoading(true)
@@ -520,6 +532,7 @@ export default function DataLanePage() {
         companyId, input: latestInput, scores, summary,
         computedAt: new Date().toISOString(),
         periods,
+        presetId,
       })
       setSaved(d)
       showToast('Data Lane saved', 'success')
@@ -592,12 +605,12 @@ export default function DataLanePage() {
             <Select
               label={t('presetSelector', lang)}
               value={presetId}
-              onChange={v => { setPresetId(v as PresetId); setPresetAutoSet(true) }}
+              onChange={v => handlePresetChange(v as PresetId)}
               options={PRESET_LIST.map(p => ({ value: p.id, label: lang === 'ja' ? `${p.labelJa}` : p.label }))}
               accent={T.cyan}
             />
           </div>
-          {presetAutoSet && company?.sector && (
+          {presetFromSector && company?.sector && (
             <div style={{ fontSize: 9, color: T.textDim, fontFamily: "'Courier New', monospace", paddingBottom: 14, letterSpacing: 1 }}>
               ← {t('presetAutoDetected', lang)}: {company.sector}
             </div>
