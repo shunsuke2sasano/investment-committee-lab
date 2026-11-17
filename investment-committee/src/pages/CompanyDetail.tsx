@@ -6,10 +6,11 @@ import {
   thesisRepository, verdictRepository,
   dataAnalysisRepository, marketAnalysisRepository,
   reviewRepository, valuationRepository, monitoringRepository,
-  companyRepository,
+  companyRepository, decisionLogRepository,
 } from '../db/repositories'
 import { t } from '../lib/i18n'
-import type { ThesisAnalysis, VerdictReport, ThesisStatus } from '../types/domain'
+import type { ThesisAnalysis, VerdictReport, ThesisStatus, DecisionLogRecord } from '../types/domain'
+import DecisionLogPanel from '../features/decisionLog/DecisionLogPanel'
 import { isJapaneseStock, fetchFmpProfile } from '../lib/fmpClient'
 
 // Pipeline lanes that get completion badges (excludes Monitoring / Lessons)
@@ -52,6 +53,8 @@ export default function CompanyDetail() {
     review: false, valuation: false, verdict: false,
   })
   const [thesisStatus, setThesisStatus] = useState<ThesisStatus | null>(null)
+  const [decisionLogs, setDecisionLogs] = useState<DecisionLogRecord[]>([])
+  const [showLogPanel, setShowLogPanel] = useState(false)
 
   const TABS = [
     { key: 'thesis',     label: t('tab_thesis', lang),     color: T.purple, num: '①' },
@@ -75,7 +78,9 @@ export default function CompanyDetail() {
       valuationRepository.getLatest(id),
       verdictRepository.getLatest(id),
       monitoringRepository.get(id),
-    ]).then(([thesisData, data, market, review, valuation, verdictData, monitoring]) => {
+      decisionLogRepository.listByCompany(id),
+    ]).then(([thesisData, data, market, review, valuation, verdictData, monitoring, logs]) => {
+      setDecisionLogs(logs)
       setThesis(thesisData ?? null)
       setVerdict(verdictData ?? null)
       setCompletion({
@@ -325,8 +330,39 @@ export default function CompanyDetail() {
               ))}
             </div>
           </div>
+
+          {/* Forward decision history (Phase A) */}
+          <div style={{ border: `1px solid ${T.borderDim}`, padding: '16px 20px', background: '#080D12', marginTop: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <SectionHeader label={t('decisionLogHistory', lang)} color={T.cyan} />
+              <Button size="sm" accent={T.cyan} onClick={() => setShowLogPanel(true)}>
+                {t('decisionLogRecordManual', lang)}
+              </Button>
+            </div>
+            {decisionLogs.length === 0 ? (
+              <div style={{ color: T.textDim, fontSize: 11 }}>{t('decisionLogEmpty', lang)}</div>
+            ) : (
+              decisionLogs.map(l => (
+                <div key={l.id} style={{ display: 'flex', gap: 12, fontSize: 11, color: T.textMid, padding: '4px 0', borderTop: `1px solid ${T.borderDim}` }}>
+                  <span>{l.decidedAt.slice(0, 10)}</span>
+                  <span style={{ color: T.text }}>{(l.humanFinalDecision ?? '—').toUpperCase()}</span>
+                  <span>{l.priceAtDecision.price != null ? `${l.priceAtDecision.price} ${l.priceAtDecision.currency}` : '—'}</span>
+                  <span>{l.comparisonStatus === 'evaluable' ? t('decisionLogEvaluable', lang) : t('decisionLogNotEvaluable', lang)}</span>
+                  {l.retrospective && <span style={{ color: T.orange }}>{t('decisionLogRetrospective', lang)}</span>}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
+      {showLogPanel && company && (
+        <DecisionLogPanel
+          company={company}
+          verdict={null}
+          onClose={() => setShowLogPanel(false)}
+          onSaved={rec => setDecisionLogs(prev => [rec, ...prev])}
+        />
+      )}
     </div>
   )
 }

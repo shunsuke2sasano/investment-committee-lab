@@ -23,6 +23,7 @@ const LessonPage     = React.lazy(() => import('./pages/LessonPage'))
 const MetricsPage    = React.lazy(() => import('./pages/MetricsPage'))
 const SettingsPage   = React.lazy(() => import('./pages/SettingsPage'))
 const PortfolioPage  = React.lazy(() => import('./pages/PortfolioPage'))
+const DecisionLogPage = React.lazy(() => import('./pages/DecisionLogPage'))
 
 function Layout({ children }: { children: React.ReactNode }) {
   const toast = useStore(s => s.toast)
@@ -32,6 +33,7 @@ function Layout({ children }: { children: React.ReactNode }) {
     { to: '/companies',  key: 'nav_cases' as const },
     { to: '/portfolio',  key: 'nav_portfolio' as const },
     { to: '/lessons',    key: 'nav_lessons' as const },
+    { to: '/decision-logs', key: 'nav_decision_log' as const },
     { to: '/metrics',    key: 'nav_metrics' as const },
     { to: '/settings',   key: 'nav_settings' as const },
   ]
@@ -226,6 +228,7 @@ export default function App() {
             <Route path="/portfolio"                element={<PortfolioPage />} />
             <Route path="/lessons"                  element={<LessonPage />} />
             <Route path="/metrics"                  element={<MetricsPage />} />
+            <Route path="/decision-logs"            element={<DecisionLogPage />} />
             <Route path="/settings"                 element={<SettingsPage />} />
           </Routes>
         </Layout>
