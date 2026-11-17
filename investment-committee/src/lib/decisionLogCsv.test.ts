@@ -6,7 +6,7 @@ import type { DecisionLogEvaluation, DecisionLogRecord } from '../types/domain'
 const NOW = '2026-06-01T12:00:00.000Z'
 
 const log: DecisionLogRecord = {
-  id: 'l1', seq: 0, schemaVersion: 1, companyId: 'c1', ticker: 'TEST', companyName: 'Test, Inc',
+  id: 'l1', schemaVersion: 1, companyId: 'c1', ticker: 'TEST', companyName: 'Test, Inc',
   decidedAt: '2026-06-01T10:00:00.000Z', createdAt: NOW, entrySource: 'verdict_save',
   retrospective: false, appVersion: '0.0.0', buildCommit: 'abc', versionUnknown: false,
   decisionSessionId: null, candidateSource: null, aiReviewUsed: false, engineVersionOrNone: null,
@@ -27,7 +27,7 @@ const log: DecisionLogRecord = {
     review: { id: null, sourceAt: null, asOfStatus: 'absent' },
   },
   engineRank: null, engineScore: null, linkedPositionId: null,
-  contentHash: 'hash1', prevLogHash: null,
+  contentHash: 'hash1',
 }
 
 const evaluation: DecisionLogEvaluation = {

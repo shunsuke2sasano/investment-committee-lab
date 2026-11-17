@@ -18,7 +18,7 @@ describe('canonicalStringify', () => {
 describe('hashLogBody', () => {
   const base = {
     id: 'id-1', decidedAt: '2026-01-01T00:00:00.000Z', createdAt: '2026-01-01T00:00:00.000Z',
-    prevLogHash: null as string | null, ticker: 'AAPL', contentHash: '',
+    ticker: 'AAPL', rationale: 'r', contentHash: '',
   }
   it('verifies a body it hashed', async () => {
     const body = { ...base, contentHash: await hashLogBody(base) }
@@ -29,11 +29,11 @@ describe('hashLogBody', () => {
     const h2 = await hashLogBody({ ...base, ticker: 'MSFT' })
     expect(h1).not.toBe(h2)
   })
-  it('covers id, createdAt and prevLogHash (only contentHash is excluded)', async () => {
+  it('covers id and createdAt (only contentHash is excluded)', async () => {
     const h1 = await hashLogBody(base)
     expect(await hashLogBody({ ...base, id: 'id-2' })).not.toBe(h1)
     expect(await hashLogBody({ ...base, createdAt: '2026-01-02T00:00:00.000Z' })).not.toBe(h1)
-    expect(await hashLogBody({ ...base, prevLogHash: 'abc' })).not.toBe(h1)
+    expect(await hashLogBody({ ...base, rationale: 'changed' })).not.toBe(h1)
   })
   it('detects tampering', async () => {
     const body = { ...base, contentHash: await hashLogBody(base) }

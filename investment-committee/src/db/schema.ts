@@ -139,7 +139,7 @@ export class InvestmentCommitteeDB extends Dexie {
       metric_snapshots:  'id, asOfDate',
       app_settings:      'id',
       position_records:  'id, companyId, status, createdAt',
-      decision_logs:             'id, companyId, ticker, decidedAt, humanFinalDecision',
+      decision_logs:             'id, companyId, ticker, decidedAt, humanFinalDecision, &[verdictReportId+decidedAt]',
       decision_log_events:       'id, logId, at',
       decision_log_evaluations:  'id, logId, horizonMonths',
     })

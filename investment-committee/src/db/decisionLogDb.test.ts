@@ -75,16 +75,17 @@ describe('decisionLogRepository.create', () => {
     const first = await decisionLogRepository.create(makeDraft('2026-06-01T10:00:00.000Z'))
     const second = await decisionLogRepository.create(makeDraft('2026-07-01T10:00:00.000Z'))
     expect(second.previousLogId).toBe(first.id)
-    expect(second.prevLogHash).toBe(first.contentHash)
   })
 
-  it('chains hashes in creation order without forking', async () => {
+  it('gives each record an independent, verifiable hash (no global chain)', async () => {
     const a = await decisionLogRepository.create(makeDraft('2026-06-01T10:00:00.000Z', 'v1'))
     const b = await decisionLogRepository.create(makeDraft('2026-06-02T10:00:00.000Z', 'v2'))
-    const c = await decisionLogRepository.create(makeDraft('2026-06-03T10:00:00.000Z', 'v3'))
-    expect(a.prevLogHash).toBeNull()
-    expect(b.prevLogHash).toBe(a.contentHash)
-    expect(c.prevLogHash).toBe(b.contentHash)
+    expect(await verifyLogBody(a)).toBe(true)
+    expect(await verifyLogBody(b)).toBe(true)
+    // Tampering with one record is detected on that record alone and does
+    // not affect the verification of the other.
+    expect(await verifyLogBody({ ...a, rationale: 'rewritten' })).toBe(false)
+    expect(await verifyLogBody(b)).toBe(true)
   })
 
   it('exposes no update or delete (append-only surface)', () => {

@@ -15,7 +15,7 @@ import type {
   CandidateSource,
 } from '../types/domain'
 
-export type DecisionLogDraft = Omit<DecisionLogRecord, 'id' | 'seq' | 'contentHash' | 'prevLogHash'>
+export type DecisionLogDraft = Omit<DecisionLogRecord, 'id' | 'contentHash'>
 
 export function emptyPriceSnapshot(recordedAt: string): PriceSnapshot {
   return {
@@ -104,7 +104,11 @@ export function buildDecisionLogDraft(input: BuildDraftInput): DecisionLogDraft 
   const asOf = input.referenceTime
   const dataPick = pickSectionAsOf(input.dataAnalyses, asOf, r => r.computedAt)
   const valPick = pickSectionAsOf(input.valuations, asOf, r => r.createdAt)
-  const thesisPick = pickSectionAsOf(input.theses, asOf, r => r.createdAt)
+  // Thesis records can be edited in place (thesisRepository.update), so
+  // their decision-time content is only guaranteed when the last edit
+  // predates the decision — judge them by updatedAt, not createdAt
+  // (Issue #6, mandatory fix B). The other sources are append-only saves.
+  const thesisPick = pickSectionAsOf(input.theses, asOf, r => r.updatedAt)
   const reviewPick = pickSectionAsOf(input.reviews, asOf, r => r.createdAt)
 
   const data = dataPick.verified
@@ -113,6 +117,15 @@ export function buildDecisionLogDraft(input: BuildDraftInput): DecisionLogDraft 
   const review = reviewPick.verified
 
   const retrospective = isRetrospective(input.decidedAt, input.createdAt)
+  // Settings cannot be reconstructed for a past moment. The current
+  // cagrGateMin is frozen as the decision-time value only when the log is
+  // created contemporaneously with the decision (verdict flow: the same
+  // day the verdict was saved; manual flow: not retrospective). In every
+  // other case it stays unknown rather than pretending today's setting
+  // was the threshold in force back then (Issue #6, mandatory fix B).
+  const settingsFixable = input.verdict
+    ? input.verdict.createdAt.slice(0, 10) === input.createdAt.slice(0, 10)
+    : !retrospective
   const versionUnknown = input.buildCommit == null
   const exclusions = deriveComparisonExclusions({
     price: input.priceAtDecision, retrospective, versionUnknown,
@@ -167,7 +180,7 @@ export function buildDecisionLogDraft(input: BuildDraftInput): DecisionLogDraft 
     expectedCagr: val?.expectedCagr ?? null,
     cagrGate: val?.cagrGate ?? null,
     impliedGrowthPct: val?.impliedGrowthPct ?? null,
-    cagrGateMinUsed: input.cagrGateMin,
+    cagrGateMinUsed: settingsFixable ? input.cagrGateMin : null,
 
     thesisSnapshot: thesis
       ? { thesisText: thesis.thesisText, collapseConditions: thesis.collapseConditions }

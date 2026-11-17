@@ -141,6 +141,22 @@ describe('buildDecisionLogDraft', () => {
     expect(d.cagrGate).toBeNull()
   })
 
+  it('treats a thesis edited after the verdict as unverified (mandatory fix B)', () => {
+    const edited = {
+      ...thesis('t1', '2026-05-03T00:00:00.000Z'),
+      thesisText: 'rewritten after the decision',
+      updatedAt: '2026-07-01T00:00:00.000Z',
+    }
+    const d = draftBase({ theses: [edited] })
+    expect(d.sourceRefs.thesis.asOfStatus).toBe('unverified')
+    expect(d.thesisSnapshot).toBeNull()
+  })
+
+  it('does not freeze today\'s cagrGateMin into a log recorded on a later day (mandatory fix B)', () => {
+    const d = draftBase({ createdAt: '2026-06-05T12:00:00.000Z' })
+    expect(d.cagrGateMinUsed).toBeNull()
+  })
+
   it('backdated manual entries cannot attach newer financials (P0-1)', () => {
     const d = draftBase({
       entrySource: 'manual', verdict: null,
