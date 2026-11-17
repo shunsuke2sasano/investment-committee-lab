@@ -105,7 +105,7 @@ function AppInit({ children }: { children: React.ReactNode }) {
       setGlobalLoading(false)
     }
     init()
-  }, [])
+  }, [setCompanies, setSettings, setGlobalLoading, setUnlocked])
   return <>{children}</>
 }
 

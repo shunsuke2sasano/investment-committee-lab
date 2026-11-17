@@ -78,8 +78,8 @@ export default function ReviewPage() {
       const saved = await reviewRepository.save({ ...result, companyId })
       setReport(saved)
       showToast('AI Review complete', 'success')
-    } catch (e: any) {
-      showToast(`Error: ${e.message}`, 'error')
+    } catch (e) {
+      showToast(`Error: ${e instanceof Error ? e.message : String(e)}`, 'error')
     }
     setLoading(false)
   }

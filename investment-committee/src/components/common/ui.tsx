@@ -1,3 +1,7 @@
+/* eslint-disable react-refresh/only-export-components -- Design tokens
+   (T, css, hexRgb) are intentionally co-located with the UI components in
+   this module; project convention treats ui.tsx as the single source for
+   both, so fast-refresh granularity is traded for that simplicity. */
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 

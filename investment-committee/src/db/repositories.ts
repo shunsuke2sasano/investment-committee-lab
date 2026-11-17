@@ -1,4 +1,5 @@
 import { db } from './schema'
+import type { Table } from 'dexie'
 import type {
   CompanyCase, ThesisAnalysis, DataAnalysis, MarketAnalysis,
   ReviewReport, ValuationReport, VerdictReport, MonitoringPlan,
@@ -41,25 +42,27 @@ const PLAIN = {
 async function encRow<T extends { id: string }>(
   row: T,
   keepPlain: readonly string[] = [],
-): Promise<any> {
+): Promise<T> {
   if (!isEncryptionActive()) return row
   const key = getActiveCryptoKey()!
   const _enc = await cryptoEncrypt(key, JSON.stringify(row))
   const shell: Record<string, unknown> = { id: row.id, [ENC_FIELD]: _enc }
   for (const f of keepPlain) {
-    if (f in row) shell[f] = (row as any)[f]
+    if (f in row) shell[f] = (row as Record<string, unknown>)[f]
   }
-  return shell
+  // The encrypted shell is a wire format; Dexie tables store it opaquely
+  // under the row's type, and decRow restores the real shape on read.
+  return shell as unknown as T
 }
 
 // Fix 3: catch decrypt errors, log, return undefined (skip record)
-async function decRow<T>(raw: any): Promise<T | undefined> {
-  if (!raw) return undefined
+async function decRow<T>(raw: unknown): Promise<T | undefined> {
+  if (!raw || typeof raw !== 'object') return undefined
   if (!(ENC_FIELD in raw)) return raw as T
   const key = getActiveCryptoKey()
   if (!key) throw new Error('Encryption key not available — please unlock the app')
   try {
-    return JSON.parse(await cryptoDecrypt(key, raw[ENC_FIELD])) as T
+    return JSON.parse(await cryptoDecrypt(key, (raw as Record<string, unknown>)[ENC_FIELD] as string)) as T
   } catch (e) {
     console.error('[crypto] decRow: decryption failed', e)
     return undefined
@@ -67,7 +70,7 @@ async function decRow<T>(raw: any): Promise<T | undefined> {
 }
 
 // Fix 3: notify UI once (debounced) if any records fail
-async function decRows<T>(rows: any[]): Promise<T[]> {
+async function decRows<T>(rows: unknown[]): Promise<T[]> {
   const results = await Promise.all(rows.map(r => decRow<T>(r)))
   const filtered: T[] = []
   for (const r of results) {
@@ -349,12 +352,12 @@ export const positionRepository = {
 export async function decryptAllAndStrip(): Promise<void> {
   if (!isEncryptionActive()) return
 
-  async function stripTable(table: { toArray(): Promise<any[]>; bulkPut(rows: any[]): Promise<any> }): Promise<void> {
+  async function stripTable<T extends { id: string }>(table: Table<T>): Promise<void> {
     const rows = await table.toArray()
-    const plain: any[] = []
+    const plain: T[] = []
     for (const row of rows) {
       if (!(ENC_FIELD in row)) { plain.push(row); continue }
-      const dec = await decRow<any>(row)
+      const dec = await decRow<T>(row)
       if (dec) plain.push(dec)
     }
     if (plain.length > 0) await table.bulkPut(plain)

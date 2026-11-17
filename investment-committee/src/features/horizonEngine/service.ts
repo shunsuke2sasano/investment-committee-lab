@@ -49,7 +49,7 @@ async function resolveApiKey(): Promise<string> {
   const settings = await settingsRepository.get()
   const dbKey = (settings.anthropicApiKey ?? '').trim()
   if (dbKey) return dbKey
-  return (import.meta as any).env?.VITE_ANTHROPIC_API_KEY ?? ''
+  return import.meta.env.VITE_ANTHROPIC_API_KEY ?? ''
 }
 
 export async function estimateTimeToValidate(

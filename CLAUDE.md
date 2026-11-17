@@ -2,7 +2,10 @@
 
 ## プロジェクト概要
 個人資産形成のための株式投資判断支援システム。
-完全ローカル動作（IndexedDB）。外部送信なし。
+データ保存は完全ローカル動作（IndexedDB）。
+外部送信は任意機能を使う場合のみ発生する: AI機能は Anthropic API、
+財務データ取得は FMP API へ、入力データとAPIキーを送信する。
+APIキー未設定時はどちらの外部送信も行われない。
 
 ## ディレクトリ
 ```
@@ -32,8 +35,8 @@ docs/
 - IndexedDB (Dexie)
 - Zustand（状態管理）
 - react-router-dom
-- AI: claude-sonnet-4-20250514（Anthropic API直呼び）
-- APIキー: `VITE_ANTHROPIC_API_KEY`（.env.local）
+- AI: claude-sonnet-4-5（Anthropic API直呼び。モデル名は `lib/constants.ts` の `CLAUDE_MODEL` が正）
+- APIキー: Settings画面で入力したキー（IndexedDB保存）が優先。未入力時は `VITE_ANTHROPIC_API_KEY`（.env.local）にフォールバック
 
 ## 3レーン設計（重要）
 ```
@@ -106,10 +109,23 @@ businessQuality / growthQuality / capitalEfficiency / balanceSheetSafety
 - VETO候補ライン自動提示
 - Rule of 40 計算・表示
 
+**Phase 4-B4（スタイルスコアリング）**:
+- CSVインポート/エクスポート（財務データ一括取込、`lib/csvParser.ts`）
+- 投資スタイル別スコアリング（Oracle / Navigator / Visionary / Compounder）
+- Position Lane（保有ポジション管理）
+- スタイル別AI Review（`features/styleReview/`）
+
 ### 次のタスク
 
-**Phase 4-B4**:
-- CSVインポート（財務データ一括取込）
+- 未定（Phase 4-B4まで完了）。`docs/ic-progress.docx` は 2026-03-27 時点の
+  スナップショットであり、進捗の最新状態はこのファイルとgit履歴を正とする。
+
+### 保守状況（2026-11-17確認）
+- CAGRゲートは Verdict で強制される（`calculateVerdict` が gate='block' 時に
+  BUY→WATCH へダウングレード）。閾値は Settings の `cagrGateMin`（既定12%）が正で、
+  ハードコードしないこと
+- 純粋計算関数には Vitest の単体テストがある（`src/lib/*.test.ts`、`npm test`）
+- `npm run lint` はエラー・警告ゼロを維持すること
 
 ## コーディング規約
 - スタイルは全てinline style（Tailwind不使用）
@@ -117,7 +133,7 @@ businessQuality / growthQuality / capitalEfficiency / balanceSheetSafety
 - 色は `hexRgb(T.xxx)` でrgba変換
 - 翻訳は `t('key', lang)` を使う（i18n.ts参照）
 - 新しい文言を追加したら必ずi18n.tsにEN/JAを追加する
-- AIを呼ぶときは `claude-sonnet-4-20250514` を使う
+- AIを呼ぶときは `lib/constants.ts` の `CLAUDE_MODEL` を使う（直書きしない）
 - DB操作は必ずrepositories.ts経由
 - 純粋計算関数はcalculators.tsに置く
 

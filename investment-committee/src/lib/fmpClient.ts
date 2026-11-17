@@ -58,6 +58,16 @@ interface FmpKeyMetricsItem {
   currentRatio: number | null
 }
 
+export interface FmpProfileItem {
+  price?: number
+  marketCap?: number
+  enterpriseValue?: number
+  sector?: string
+  companyName?: string
+  currency?: string
+  exchange?: string
+}
+
 // ── Fetch helpers ─────────────────────────────────────────────────────────
 
 const BASE = FMP_BASE_URL
@@ -73,7 +83,7 @@ async function fmpGet<T>(path: string): Promise<T[]> {
 // ── Public API ────────────────────────────────────────────────────────────
 
 export async function fetchFmpProfile(ticker: string, apiKey: string): Promise<FmpProfileData> {
-  const items = await fmpGet<any>(`/profile?symbol=${ticker}&apikey=${apiKey}`)
+  const items = await fmpGet<FmpProfileItem>(`/profile?symbol=${ticker}&apikey=${apiKey}`)
   if (items.length === 0) throw new Error('No profile data returned')
   const d = items[0]
   return {

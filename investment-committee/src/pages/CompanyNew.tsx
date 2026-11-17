@@ -73,7 +73,7 @@ export default function CompanyNew() {
       upsertCompany(company)
       showToast(t('created', lang, { ticker: company.ticker }), 'success')
       navigate(`/companies/${company.id}`)
-    } catch (err) {
+    } catch {
       showToast(t('saveFailed', lang), 'error')
     }
     setLoading(false)
@@ -89,7 +89,7 @@ export default function CompanyNew() {
     <div style={{ flex: 1, overflowY: 'auto' }}>
       <PageLayout title={t('newCaseTitle', lang)} subtitle={t('newCaseSubtitle', lang)}>
         <div style={{ maxWidth: 600 }}>
-          {/* @ts-ignore */}<SectionHeader label={t("identification", lang)} color={T.cyan} />
+          <SectionHeader label={t("identification", lang)} color={T.cyan} />
           <Input label={t('tickerLabel', lang)} value={form.ticker} onChange={v => setForm(f => ({ ...f, ticker: v.toUpperCase() }))} error={errors.ticker} placeholder="NVDA" accent={T.cyan} />
 
           {/* FMP fetch button — shown after ticker is entered */}

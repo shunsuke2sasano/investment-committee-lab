@@ -11,7 +11,7 @@ import {
   verdictRepository, valuationRepository, dataAnalysisRepository,
   marketAnalysisRepository, thesisRepository, reviewRepository,
 } from '../db/repositories'
-import { calculateVerdict } from '../lib/calculators'
+import { calculateVerdict, cagrGateFor, DEFAULT_CAGR_GATE_MIN } from '../lib/calculators'
 import type { VerdictAxes, AxisScore, VerdictReport, DataAnalysis, MarketAnalysis } from '../types/domain'
 import { VERDICT_PROFILES } from '../types/domain'
 import { generateVerdictDraft, applyDraftToAxes } from '../features/verdictEngine/service'
@@ -32,25 +32,25 @@ interface StyleDef {
 
 const STYLE_CONFIG: Record<InvestmentStyle, StyleDef> = {
   oracle: {
-    image: '/oracle.png', name: 'THE ORACLE', subtitle: 'VALUE',
+    image: '/oracle.webp', name: 'THE ORACLE', subtitle: 'VALUE',
     descEn: 'Find undervalued quality and hold', descJa: '割安な優良企業を見極め長く持つ',
     profileId: 'conservative',
     axisWeights: { valuationAttractiveness: 1.5, balanceSheetSafety: 1.3, growthQuality: 0.8 },
   },
   navigator: {
-    image: '/navigator.png', name: 'THE NAVIGATOR', subtitle: 'GARP',
+    image: '/navigator.webp', name: 'THE NAVIGATOR', subtitle: 'GARP',
     descEn: 'Balance growth and valuation', descJa: '成長性と割安性のバランスを見る',
     profileId: 'standard',
     axisWeights: { growthQuality: 1.2, valuationAttractiveness: 1.2, marketExpectationGap: 1.2 },
   },
   visionary: {
-    image: '/visionary.png', name: 'THE VISIONARY', subtitle: 'GROWTH',
+    image: '/visionary.webp', name: 'THE VISIONARY', subtitle: 'GROWTH',
     descEn: 'Bet boldly on future growth themes', descJa: '未来の成長テーマに強く賭ける',
     profileId: 'aggressive',
     axisWeights: { growthQuality: 1.5, businessQuality: 1.3, valuationAttractiveness: 0.7 },
   },
   compounder: {
-    image: '/compounder.png', name: 'THE COMPOUNDER', subtitle: 'DIVIDEND',
+    image: '/compounder.webp', name: 'THE COMPOUNDER', subtitle: 'DIVIDEND',
     descEn: 'Compounding through patience and quality', descJa: '複利・忍耐・優良企業の長期保有',
     profileId: 'conservative',
     axisWeights: { capitalEfficiency: 1.5, balanceSheetSafety: 1.3, governance: 1.3, growthQuality: 0.8 },
@@ -133,7 +133,7 @@ export default function VerdictPage() {
   const [saved, setSaved] = useState<VerdictReport | null>(null)
   const [loading, setLoading] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
-  const [cagrBlocked, setCagrBlocked] = useState(false)
+  const [valuationCagr, setValuationCagr] = useState<number | null>(null)
   const [investmentStyle, setInvestmentStyle] = useState<InvestmentStyle>(PROFILE_TO_STYLE[activeProfile.id] ?? 'navigator')
   const [feed, setFeed] = useState<LaneFeed>({})
   const [styleReviews, setStyleReviews] = useState<Partial<Record<InvestmentStyle, StyleReviewResult>>>({})
@@ -155,7 +155,7 @@ export default function VerdictPage() {
         setSaved(verdict)
         setInvestmentStyle(PROFILE_TO_STYLE[verdict.profileUsed.id] ?? 'navigator')
       }
-      if (valuation?.cagrGate === 'block') setCagrBlocked(true)
+      setValuationCagr(valuation?.expectedCagr ?? null)
       setFeed(buildFeed(data, market))
     })
   }, [companyId])
@@ -163,7 +163,13 @@ export default function VerdictPage() {
   const currentStyle   = STYLE_CONFIG[investmentStyle]
   const currentProfile = VERDICT_PROFILES[currentStyle.profileId]
   const currentWeights = currentStyle.axisWeights
-  const { totalScore, vetoCount, verdict } = calculateVerdict(axes, currentProfile, currentWeights)
+  // Re-derive the gate from the saved expected CAGR and the *current*
+  // Settings minimum, so changing cagrGateMin takes effect without
+  // re-saving the valuation. No valuation yet → gate is null → no block.
+  const cagrGateMin = settings?.cagrGateMin ?? DEFAULT_CAGR_GATE_MIN
+  const cagrGate    = cagrGateFor(valuationCagr, cagrGateMin)
+  const cagrBlocked = cagrGate === 'block'
+  const { totalScore, vetoCount, verdict } = calculateVerdict(axes, currentProfile, currentWeights, { cagrGate })
 
   function updateAxis(key: keyof VerdictAxes, patch: Partial<AxisScore>) {
     setAxes(p => ({ ...p, [key]: { ...p[key], ...patch } }))
@@ -204,8 +210,8 @@ export default function VerdictPage() {
       setAxes(applyDraftToAxes(draft.axes, axes))
       setRationale(draft.rationale)
       showToast(t('verdictAiSuccess', lang), 'success')
-    } catch (e: any) {
-      showToast(`Error: ${e.message}`, 'error')
+    } catch (e) {
+      showToast(`Error: ${e instanceof Error ? e.message : String(e)}`, 'error')
     }
     setAiLoading(false)
   }
@@ -247,8 +253,8 @@ export default function VerdictPage() {
         setAxes(newAxes)
         setRationale(verdictDraft.rationale)
       }
-    } catch (e: any) {
-      showToast(`Error: ${e.message}`, 'error')
+    } catch (e) {
+      showToast(`Error: ${e instanceof Error ? e.message : String(e)}`, 'error')
     }
     setStyleReviewLoading(null)
   }
@@ -288,8 +294,8 @@ export default function VerdictPage() {
         const currentResult = allResults.find(([sr]) => sr.style === investmentStyle)
         if (currentResult) setRationale(currentResult[1].rationale)
       }
-    } catch (e: any) {
-      showToast(`Error: ${e.message}`, 'error')
+    } catch (e) {
+      showToast(`Error: ${e instanceof Error ? e.message : String(e)}`, 'error')
     }
     setAllStylesLoading(false)
   }
@@ -306,7 +312,7 @@ export default function VerdictPage() {
     if (!companyId) return
     setLoading(true)
     try {
-      const { totalScore, vetoCount, verdict } = calculateVerdict(axes, currentProfile, currentWeights)
+      const { totalScore, vetoCount, verdict } = calculateVerdict(axes, currentProfile, currentWeights, { cagrGate })
       const v = await verdictRepository.save({
         companyId,
         axisScores: axes,
@@ -350,10 +356,10 @@ export default function VerdictPage() {
         {cagrBlocked && (
           <div style={{ border: `2px solid ${T.red}`, background: `rgba(${hexRgb(T.red)},0.08)`, padding: '14px 20px', marginBottom: 20 }}>
             <div style={{ color: T.red, fontSize: 12, fontWeight: 700, letterSpacing: 2 }}>
-              🚫 VALUATION GATE — 期待CAGR &lt; 12%
+              🚫 VALUATION GATE — 期待CAGR &lt; {cagrGateMin}%
             </div>
             <div style={{ color: T.textDim, fontSize: 11, marginTop: 4 }}>
-              Valuationページで期待CAGRが12%を下回っています。BUYは自動的にWATCHにダウングレードされます。
+              Valuationページで期待CAGRが{cagrGateMin}%を下回っています。BUYは自動的にWATCHにダウングレードされます。
             </div>
           </div>
         )}

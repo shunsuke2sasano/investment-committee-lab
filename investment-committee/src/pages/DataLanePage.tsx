@@ -400,9 +400,13 @@ export default function DataLanePage() {
   const fmpKey    = settings?.fmpApiKey ?? ''
   const hasFmpKey = fmpKey.trim().length > 0
 
-  // ── Preset init from CompanyCase (synchronous, no race condition) ─────────
-  useEffect(() => {
-    if (!company) return
+  // ── Preset init from CompanyCase ─────────────────────────────────────────
+  // React's "adjust state when a prop changes" pattern: reset the preset
+  // during render when navigating to a different company, instead of
+  // syncing state from an effect. Runs once per company id.
+  const [presetCompanyId, setPresetCompanyId] = useState<string | null>(null)
+  if (company && company.id !== presetCompanyId) {
+    setPresetCompanyId(company.id)
     if (company.dataPresetId) {
       setPresetId(company.dataPresetId as PresetId)
       setPresetFromSector(false)
@@ -410,7 +414,7 @@ export default function DataLanePage() {
       setPresetId(inferPresetFromSector(company.sector))
       setPresetFromSector(!!company.sector)
     }
-  }, [company?.id])  // re-run only when navigating to a different company
+  }
 
   // ── Load periods from DataAnalysis ────────────────────────────────────────
   useEffect(() => {
@@ -442,7 +446,7 @@ export default function DataLanePage() {
 
   const toggleHelp = useCallback((field: keyof DataLaneInput) => {
     setHelpField(prev => prev === field ? null : field)
-  }, [])
+  }, [setHelpField])
 
   // ── Derived ─────────────────────────────────────────────────────────────
   const preset      = INDUSTRY_PRESETS[presetId]

@@ -220,18 +220,47 @@ export function calculateValuationScenario(
   return { revenueGrowthAdj, fcfMarginAdj, exitMultipleAdj, impliedEnterpriseValue, expectedCagr, notes }
 }
 
-export function calculateValuation(assumptions: ValuationAssumptions) {
+export type CagrGate = 'pass' | 'watch' | 'block'
+
+/** Default minimum expected CAGR for BUY (Settings: cagrGateMin). */
+export const DEFAULT_CAGR_GATE_MIN = 12
+/** Expected CAGR at or above this is a clear pass, regardless of gateMin. */
+export const CAGR_GATE_PASS = 20
+
+/**
+ * Classify an expected CAGR against the valuation gate.
+ * Returns null when the CAGR is unknown (no valuation yet) — callers must
+ * not treat "unknown" as a block.
+ *   expectedCagr <  gateMin            → 'block' (BUY is forbidden)
+ *   gateMin      <= expectedCagr < 20  → 'watch'
+ *   expectedCagr >= max(20, gateMin)   → 'pass'
+ */
+export function cagrGateFor(
+  expectedCagr: number | null,
+  cagrGateMin: number = DEFAULT_CAGR_GATE_MIN,
+): CagrGate | null {
+  if (expectedCagr === null || !Number.isFinite(expectedCagr)) return null
+  const gateMin = Number.isFinite(cagrGateMin) && cagrGateMin > 0
+    ? cagrGateMin
+    : DEFAULT_CAGR_GATE_MIN
+  if (expectedCagr < gateMin) return 'block'
+  if (expectedCagr >= Math.max(CAGR_GATE_PASS, gateMin)) return 'pass'
+  return 'watch'
+}
+
+export function calculateValuation(
+  assumptions: ValuationAssumptions,
+  cagrGateMin: number = DEFAULT_CAGR_GATE_MIN,
+) {
   const bear = calculateValuationScenario(assumptions, 0.65, 0.85, 0.75)
   const base = calculateValuationScenario(assumptions, 1.00, 1.00, 1.00)
   const bull = calculateValuationScenario(assumptions, 1.40, 1.15, 1.25)
 
   const expectedCagr = base.expectedCagr
 
-  let cagrGate: 'pass' | 'watch' | 'block' = 'block'
-  if (expectedCagr !== null) {
-    if (expectedCagr >= 20)      cagrGate = 'pass'
-    else if (expectedCagr >= 12) cagrGate = 'watch'
-  }
+  // Stored reports keep a non-null gate: an uncalculable CAGR stays 'block',
+  // matching the historical behaviour of this function.
+  const cagrGate: CagrGate = cagrGateFor(expectedCagr, cagrGateMin) ?? 'block'
 
   const downsideRiskScore = (base.expectedCagr !== null && bear.expectedCagr !== null)
     ? base.expectedCagr - bear.expectedCagr
@@ -244,11 +273,21 @@ export function calculateValuation(assumptions: ValuationAssumptions) {
 // VERDICT ENGINE — pure functions
 // ═══════════════════════════════════════════════════════════════════════════
 
+export interface VerdictGateOptions {
+  /**
+   * Valuation CAGR gate for this company (see cagrGateFor).
+   * 'block' downgrades a BUY verdict to WATCH. Omit / null when there is
+   * no valuation yet — an unknown gate must not block a verdict.
+   */
+  cagrGate?: CagrGate | null
+}
+
 export function calculateVerdict(
   axisScores: VerdictAxes,
   profile: VerdictProfile,
   weights?: Partial<Record<keyof VerdictAxes, number>>,
-): { totalScore: number; vetoCount: number; verdict: VerdictResult } {
+  options?: VerdictGateOptions,
+): { totalScore: number; vetoCount: number; verdict: VerdictResult; cagrBlocked: boolean } {
   const axisEntries = Object.entries(axisScores) as [keyof VerdictAxes, { score: number; veto: boolean }][]
 
   let totalScore: number
@@ -278,7 +317,14 @@ export function calculateVerdict(
     verdict = 'PASS'
   }
 
-  return { totalScore, vetoCount, verdict }
+  // Valuation gate (enforced): expected CAGR below the minimum blocks BUY.
+  // A blocked BUY is downgraded to WATCH; WATCH / PASS are left unchanged.
+  const cagrBlocked = options?.cagrGate === 'block'
+  if (cagrBlocked && verdict === 'BUY') {
+    verdict = 'WATCH'
+  }
+
+  return { totalScore, vetoCount, verdict, cagrBlocked }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

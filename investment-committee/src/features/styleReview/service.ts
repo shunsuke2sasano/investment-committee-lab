@@ -1,5 +1,6 @@
 import { CLAUDE_MODEL, ANTHROPIC_API_VERSION } from '../../lib/constants'
 import { settingsRepository } from '../../db/repositories'
+import type { ThesisAnalysis, DataAnalysis, MarketAnalysis, ValuationReport, ReviewReport } from '../../types/domain'
 
 export type StyleReviewStyle = 'oracle' | 'navigator' | 'visionary' | 'compounder'
 
@@ -14,11 +15,11 @@ export interface StyleReviewResult {
 
 interface ReviewPayload {
   company: { ticker: string; name?: string | null; sector?: string | null; horizonMonths?: number | null }
-  thesis: any
-  dataLane: any
-  marketLane: any
-  valuation: any
-  review: any
+  thesis: ThesisAnalysis | null
+  dataLane: DataAnalysis | null
+  marketLane: MarketAnalysis | null
+  valuation: ValuationReport | null
+  review: ReviewReport | null
 }
 
 const PERSONA_PROMPTS: Record<StyleReviewStyle, string> = {
@@ -63,7 +64,7 @@ async function resolveApiKey(): Promise<string> {
   const settings = await settingsRepository.get()
   const dbKey = (settings.anthropicApiKey ?? '').trim()
   if (dbKey) return dbKey
-  return (import.meta as any).env?.VITE_ANTHROPIC_API_KEY ?? ''
+  return import.meta.env.VITE_ANTHROPIC_API_KEY ?? ''
 }
 
 function buildPrompt(payload: ReviewPayload, lang: 'en' | 'ja'): string {
@@ -75,7 +76,7 @@ function buildPrompt(payload: ReviewPayload, lang: 'en' | 'ja'): string {
 
   if (payload.thesis) {
     lines.push('\n【投資仮説】')
-    if (payload.thesis.summary)       lines.push(`サマリー: ${payload.thesis.summary}`)
+    if (payload.thesis.thesisText)    lines.push(`サマリー: ${payload.thesis.thesisText}`)
     if (payload.thesis.drivers?.length)
       lines.push(`ドライバー: ${payload.thesis.drivers.join(' / ')}`)
   }
@@ -114,16 +115,15 @@ function buildPrompt(payload: ReviewPayload, lang: 'en' | 'ja'): string {
       lines.push(`期待CAGR（Base）: ${payload.valuation.expectedCagr.toFixed(1)}%`)
     if (payload.valuation.cagrGate)
       lines.push(`CAGRゲート: ${payload.valuation.cagrGate}`)
-    const base = payload.valuation.base
+    const base = payload.valuation.scenarios.base
     if (base?.impliedEnterpriseValue != null)
       lines.push(`想定EV（Base）: $${(base.impliedEnterpriseValue / 1000).toFixed(1)}B`)
   }
 
   if (payload.review) {
     lines.push('\n【AIレビュー概要】')
-    if (payload.review.overallSignal) lines.push(`シグナル: ${payload.review.overallSignal}`)
     const risks = payload.review.risks?.slice(0, 3)
-    if (risks?.length) lines.push(`主要リスク: ${risks.map((r: any) => r.title).join(' / ')}`)
+    if (risks?.length) lines.push(`主要リスク: ${risks.map(r => r.title).join(' / ')}`)
   }
 
   const outputLang = lang === 'ja' ? '日本語' : 'English'

@@ -136,7 +136,7 @@ async function resolveApiKey(): Promise<string> {
   const settings = await settingsRepository.get()
   const dbKey = (settings.anthropicApiKey ?? '').trim()
   if (dbKey) return dbKey
-  return (import.meta as any).env?.VITE_ANTHROPIC_API_KEY ?? ''
+  return import.meta.env.VITE_ANTHROPIC_API_KEY ?? ''
 }
 
 async function callClaude(system: string, user: string): Promise<string> {
@@ -166,23 +166,24 @@ async function callClaude(system: string, user: string): Promise<string> {
 }
 
 // ── Parse ─────────────────────────────────────────────────────────────────
-function normalizeOutput(parsed: any): ReviewEngineOutput {
-  if (!Array.isArray(parsed.missingItems))  parsed.missingItems = []
-  if (!Array.isArray(parsed.mismatches))    parsed.mismatches = []
-  if (!Array.isArray(parsed.risks))         parsed.risks = []
-  if (!Array.isArray(parsed.scenarioNotes)) parsed.scenarioNotes = []
-  return parsed as ReviewEngineOutput
+function normalizeOutput(parsed: unknown): ReviewEngineOutput {
+  const obj = (parsed ?? {}) as Record<string, unknown>
+  if (!Array.isArray(obj.missingItems))  obj.missingItems = []
+  if (!Array.isArray(obj.mismatches))    obj.mismatches = []
+  if (!Array.isArray(obj.risks))         obj.risks = []
+  if (!Array.isArray(obj.scenarioNotes)) obj.scenarioNotes = []
+  return obj as unknown as ReviewEngineOutput
 }
 
 function parseResponse(raw: string): ReviewEngineOutput {
   // 1. try direct parse
-  try { return normalizeOutput(JSON.parse(raw.trim())) } catch {}
+  try { return normalizeOutput(JSON.parse(raw.trim())) } catch { /* fall through to the next parse strategy */ }
 
   // 2. strip markdown fences, try again
   try {
     const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
     return normalizeOutput(JSON.parse(cleaned))
-  } catch {}
+  } catch { /* fall through to the next parse strategy */ }
 
   // 3. extract first '{' to last '}' (handles preamble/postamble with nested braces)
   const start = raw.indexOf('{')

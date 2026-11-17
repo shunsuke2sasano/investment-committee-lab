@@ -7,7 +7,7 @@ import { estimateTimeToValidate, generateHorizonExplanation } from '../features/
 import { inferHorizonFromConditions, findValuationOptimalHorizon, calcHorizonConfidence } from '../lib/horizonCalculator'
 import { generateThesisDraft, type ThesisGuideDraft } from '../features/thesisGuide/service'
 import { t } from '../lib/i18n'
-import type { ThesisAnalysis, CollapseCondition, HorizonInference } from '../types/domain'
+import type { ThesisAnalysis, CollapseCondition, CollapseOperator, HorizonInference } from '../types/domain'
 
 function uid() { return crypto.randomUUID() }
 
@@ -85,7 +85,7 @@ export default function ThesisPage() {
   useEffect(() => {
     settingsRepository.get().then(s => {
       const dbKey = (s.anthropicApiKey ?? '').trim()
-      const envKey = ((import.meta as any).env?.VITE_ANTHROPIC_API_KEY ?? '').trim()
+      const envKey = (import.meta.env.VITE_ANTHROPIC_API_KEY ?? '').trim()
       setHasApiKey(!!(dbKey || envKey))
     })
   }, [])
@@ -150,8 +150,8 @@ export default function ThesisPage() {
         lang === 'ja' ? `${result.size}件推定完了` : `${result.size} conditions estimated`,
         'success'
       )
-    } catch (e: any) {
-      showToast(`Error: ${e.message}`, 'error')
+    } catch (e) {
+      showToast(`Error: ${e instanceof Error ? e.message : String(e)}`, 'error')
     }
     setEstimating(false)
   }
@@ -169,8 +169,8 @@ export default function ThesisPage() {
         lang,
       })
       setAiExplanation(explanation)
-    } catch (e: any) {
-      showToast(`Error: ${e.message}`, 'error')
+    } catch (e) {
+      showToast(`Error: ${e instanceof Error ? e.message : String(e)}`, 'error')
     }
     setGeneratingExplanation(false)
   }
@@ -195,10 +195,10 @@ export default function ThesisPage() {
         guideMemo,
       )
       setGuideDraft(draft)
-    } catch (e: any) {
-      if (e.message === 'NO_API_KEY') {
+    } catch (e) {
+      if (e instanceof Error && e.message === 'NO_API_KEY') {
         setGuideError(t('thesisGuideNoKey', lang))
-      } else if (e.message === 'PARSE_ERROR') {
+      } else if (e instanceof Error && e.message === 'PARSE_ERROR') {
         setGuideError(t('thesisGuideError', lang))
       } else {
         setGuideError(t('thesisGuideError', lang))
@@ -631,7 +631,7 @@ function CollapseConditionCard({
           </label>
           <select
             value={condition.operator}
-            onChange={e => onUpdate({ operator: e.target.value as any })}
+            onChange={e => onUpdate({ operator: e.target.value as CollapseOperator })}
             style={{ width: '100%', background: '#080D12', border: `1px solid ${T.borderDim}`, color: T.text, fontFamily: "'Courier New',monospace", fontSize: 12, padding: '9px 12px', outline: 'none' }}
           >
             {['manual', '<', '<=', '>', '>=', '='].map(o => (
@@ -698,10 +698,10 @@ function CollapseConditionCard({
               {lang === 'ja' ? '確信度 (1-5)' : 'Confidence (1-5)'}
             </label>
             <div style={{ display: 'flex', gap: 4 }}>
-              {[1, 2, 3, 4, 5].map(s => (
+              {([1, 2, 3, 4, 5] as const).map(s => (
                 <button
                   key={s}
-                  onClick={() => ttv && onUpdate({ timeToValidate: { ...ttv, confidence: s as any, source: 'user' } })}
+                  onClick={() => ttv && onUpdate({ timeToValidate: { ...ttv, confidence: s, source: 'user' } })}
                   disabled={!ttv}
                   style={{
                     flex: 1, padding: '6px 0', cursor: ttv ? 'pointer' : 'not-allowed',
