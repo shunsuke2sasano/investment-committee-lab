@@ -1,9 +1,24 @@
 import { describe, it, expect } from 'vitest'
 import {
   calculateVerdict, calculateValuation, cagrGateFor,
+  scoreBusinessQuality, scoreCapitalEfficiency,
+  scoreBalanceSheetSafety, scoreCashGeneration,
+  calculateDataCoverage, isScoreInsufficient, assessFinancialRisk, evaluateFinancialRisk,
+  sufficientDataScores, buildDataSummary, calculateDataScores,
+  isSuspiciouslyHighCagr,
 } from './calculators'
+import { NOT_APPLICABLE_METRICS } from './industryPresets'
+import type { DataCoverage } from '../types/domain'
 import { VERDICT_PROFILES } from '../types/domain'
-import type { VerdictAxes, AxisScore, ValuationAssumptions } from '../types/domain'
+import type { VerdictAxes, AxisScore, ValuationAssumptions, DataLaneInput } from '../types/domain'
+
+const emptyInput: DataLaneInput = {
+  revenueGrowthYoy: null, revenueGrowth3y: null,
+  grossMargin: null, operatingMargin: null, fcfMargin: null,
+  roic: null, debtToEbitda: null, netDebtToEquity: null,
+  shareDilutionAnnual: null, reinvestmentRate: null, currentRatio: null,
+}
+const input = (patch: Partial<DataLaneInput>): DataLaneInput => ({ ...emptyInput, ...patch })
 
 const axis = (score: AxisScore['score'], veto = false): AxisScore => ({
   score, veto, comment: '', evidenceMetrics: [],
@@ -132,10 +147,33 @@ describe('calculateValuation', () => {
     expect(calculateValuation(modest, 15).cagrGate).toBe('block')
   })
 
-  it('blocks when inputs are insufficient', () => {
+  it('reports unknown (not block) when inputs are insufficient', () => {
     const v = calculateValuation({ ...assumptions, currentRevenue: null })
     expect(v.expectedCagr).toBeNull()
-    expect(v.cagrGate).toBe('block')
+    expect(v.cagrGate).toBe('unknown')
+  })
+
+  it('reverse-calculates the growth priced into the current EV', () => {
+    // Build an EV from a known 10% growth path: implied growth must
+    // recover exactly that 10%.
+    const v = calculateValuation(assumptions)
+    expect(v.impliedGrowthPct).not.toBeNull()
+    // assumptions: R=100, margin 20%, multiple 10, years 3, EV=100
+    // denominator = 100 * 0.20 * 10 = 200 → (100/200)^(1/3) − 1 ≈ −20.6%
+    expect(v.impliedGrowthPct!).toBeCloseTo(-20.6, 0)
+    const priced = { ...assumptions, currentEnterpriseValue: 100 * Math.pow(1.10, 3) * 0.20 * 10 }
+    expect(calculateValuation(priced).impliedGrowthPct!).toBeCloseTo(10, 1)
+  })
+
+  it('implied growth is null when it cannot be computed', () => {
+    expect(calculateValuation({ ...assumptions, exitMultiple: null }).impliedGrowthPct).toBeNull()
+  })
+
+  it('flags suspiciously high expected CAGR (value-trap warning)', () => {
+    expect(isSuspiciouslyHighCagr(55)).toBe(true)
+    expect(isSuspiciouslyHighCagr(40)).toBe(true)
+    expect(isSuspiciouslyHighCagr(25)).toBe(false)
+    expect(isSuspiciouslyHighCagr(null)).toBe(false)
   })
 
   it('uses Bear x0.65 / Base x1.0 / Bull x1.4 revenue growth adjustments', () => {
@@ -143,5 +181,276 @@ describe('calculateValuation', () => {
     expect(v.bear.revenueGrowthAdj).toBe(0.65)
     expect(v.base.revenueGrowthAdj).toBe(1.0)
     expect(v.bull.revenueGrowthAdj).toBe(1.4)
+  })
+})
+
+describe('data scores — severe-penalty branch order (audit fix)', () => {
+  it('negative revenue growth takes the −2 penalty, not −1', () => {
+    // 3 − 2 = 1 (before the fix the g<5 branch caught negatives first → 2)
+    expect(scoreBusinessQuality(input({ revenueGrowthYoy: -3 }))).toBe(1)
+  })
+  it('mild positive growth still takes −1', () => {
+    expect(scoreBusinessQuality(input({ revenueGrowthYoy: 3 }))).toBe(2)
+  })
+  it('gross margin below 10% takes the −2 penalty', () => {
+    expect(scoreBusinessQuality(input({ grossMargin: 8 }))).toBe(1)
+    expect(scoreBusinessQuality(input({ grossMargin: 15 }))).toBe(2)
+  })
+  it('negative ROIC takes the −2 penalty, not −1', () => {
+    expect(scoreCapitalEfficiency(input({ roic: -5 }))).toBe(1)
+    expect(scoreCapitalEfficiency(input({ roic: 5 }))).toBe(2)
+  })
+  it('strong metrics still score 5', () => {
+    expect(scoreBusinessQuality(input({ revenueGrowthYoy: 30, grossMargin: 70 }))).toBe(5)
+    expect(scoreCapitalEfficiency(input({ roic: 30, shareDilutionAnnual: -1 }))).toBe(5)
+  })
+})
+
+describe('calculateDataCoverage', () => {
+  it('empty input has zero coverage and every score is insufficient', () => {
+    const cov = calculateDataCoverage(emptyInput)
+    expect(cov.overall).toBe(0)
+    expect(cov.usedMetrics).toBe(0)
+    expect(cov.totalMetrics).toBe(8)
+    expect(isScoreInsufficient(cov, 'businessQuality')).toBe(true)
+  })
+  it('full input has complete coverage', () => {
+    const cov = calculateDataCoverage(input({
+      revenueGrowthYoy: 10, grossMargin: 50, roic: 20, shareDilutionAnnual: 0,
+      debtToEbitda: 1, currentRatio: 2, fcfMargin: 15, operatingMargin: 20,
+    }))
+    expect(cov.overall).toBe(1)
+    expect(isScoreInsufficient(cov, 'cashGeneration')).toBe(false)
+  })
+  it('one of two metrics is exactly the sufficiency boundary', () => {
+    const cov = calculateDataCoverage(input({ revenueGrowthYoy: 10 }))
+    expect(cov.perScore.businessQuality).toBe(0.5)
+    expect(isScoreInsufficient(cov, 'businessQuality')).toBe(false)
+    expect(isScoreInsufficient(cov, 'capitalEfficiency')).toBe(true)
+  })
+})
+
+describe('assessFinancialRisk', () => {
+  it('clean input produces no flags', () => {
+    expect(assessFinancialRisk(input({
+      debtToEbitda: 1, operatingMargin: 20, fcfMargin: 15,
+      shareDilutionAnnual: 0, revenueGrowthYoy: 10, revenueGrowth3y: 8,
+      goodwillIntangiblesToAssets: 20,
+    }))).toEqual([])
+  })
+  it('extreme leverage is a severe flag with a veto axis', () => {
+    const flags = assessFinancialRisk(input({ debtToEbitda: 7 }))
+    expect(flags).toHaveLength(1)
+    expect(flags[0].severity).toBe('severe')
+    expect(flags[0].vetoAxis).toBe('balanceSheetSafety')
+  })
+  it('acquisition dependence trips at 50% (caution) and 70% (severe)', () => {
+    expect(assessFinancialRisk(input({ goodwillIntangiblesToAssets: 55 }))[0].severity).toBe('caution')
+    expect(assessFinancialRisk(input({ goodwillIntangiblesToAssets: 78 }))[0].severity).toBe('severe')
+  })
+  it('positive operating margin with negative FCF is severe', () => {
+    const flags = assessFinancialRisk(input({ operatingMargin: 12, fcfMargin: -4 }))
+    expect(flags.some(f => f.id === 'earnings_quality_negative_fcf' && f.severity === 'severe')).toBe(true)
+  })
+  it('sustained revenue decline uses the 3y CAGR', () => {
+    const flags = assessFinancialRisk(input({ revenueGrowthYoy: -2, revenueGrowth3y: -1 }))
+    expect(flags.some(f => f.id === 'revenue_decline_sustained')).toBe(true)
+  })
+  it('missing data produces no flags (absence is a coverage issue, not a risk flag)', () => {
+    expect(assessFinancialRisk(emptyInput)).toEqual([])
+  })
+})
+
+describe('data scores — threshold boundary values (Phase 1, C-1)', () => {
+  // Each case varies ONE metric around a threshold; all other metrics are
+  // null, so the expected score is base 3 plus that metric's adjustment
+  // (clamp() rounds .5 up).
+  const bqGrowth: [number, number][] = [
+    [-0.1, 1], [0, 2], [4.9, 2], [5, 3], [14.9, 3], [15, 4], [24.9, 4], [25, 4],
+  ]
+  it.each(bqGrowth)('revenue growth %s%% → BQ %s', (g, want) => {
+    expect(scoreBusinessQuality(input({ revenueGrowthYoy: g }))).toBe(want)
+  })
+
+  const bqMargin: [number, number][] = [
+    [9.9, 1], [10, 2], [19.9, 2], [20, 3], [39.9, 3], [40, 4], [59.9, 4], [60, 4],
+  ]
+  it.each(bqMargin)('gross margin %s%% → BQ %s', (gm, want) => {
+    expect(scoreBusinessQuality(input({ grossMargin: gm }))).toBe(want)
+  })
+
+  const ceRoic: [number, number][] = [
+    [-0.1, 1], [0, 2], [7.9, 2], [8, 3], [14.9, 3], [15, 4], [24.9, 4], [25, 5],
+  ]
+  it.each(ceRoic)('ROIC %s%% → CE %s', (roic, want) => {
+    expect(scoreCapitalEfficiency(input({ roic }))).toBe(want)
+  })
+
+  const ceDilution: [number, number][] = [[0, 4], [2, 3], [5, 3], [5.1, 2]]
+  it.each(ceDilution)('dilution %s%% → CE %s', (dil, want) => {
+    expect(scoreCapitalEfficiency(input({ shareDilutionAnnual: dil }))).toBe(want)
+  })
+
+  const bssLeverage: [number, number][] = [
+    [0, 5], [0.1, 4], [1, 4], [1.1, 3], [2, 3], [2.1, 2], [4, 2], [4.1, 1],
+  ]
+  it.each(bssLeverage)('net debt/EBITDA %sx → BSS %s', (de, want) => {
+    expect(scoreBalanceSheetSafety(input({ debtToEbitda: de }))).toBe(want)
+  })
+
+  const bssCurrentRatio: [number, number][] = [[0.9, 2], [1, 3], [2, 4]]
+  it.each(bssCurrentRatio)('current ratio %s → BSS %s', (cr, want) => {
+    expect(scoreBalanceSheetSafety(input({ currentRatio: cr }))).toBe(want)
+  })
+
+  const cgFcf: [number, number][] = [
+    [-0.1, 1], [0, 3], [9.9, 3], [10, 4], [19.9, 4], [20, 5],
+  ]
+  it.each(cgFcf)('FCF margin %s%% → CG %s', (fcf, want) => {
+    expect(scoreCashGeneration(input({ fcfMargin: fcf }))).toBe(want)
+  })
+
+  const cgOp: [number, number][] = [[-0.1, 2], [0, 3], [25, 4]]
+  it.each(cgOp)('operating margin %s%% → CG %s', (op, want) => {
+    expect(scoreCashGeneration(input({ operatingMargin: op }))).toBe(want)
+  })
+})
+
+describe('CAGR gate — unknown stays distinct from block end-to-end', () => {
+  const base: ValuationAssumptions = {
+    currentRevenue: 100, currentFcf: 10, currentEnterpriseValue: 100,
+    baseRevenueGrowth: 10, baseFcfMargin: 20, exitMultiple: 10, years: 3,
+  }
+  it('calculable but too low is block; uncalculable is unknown — never the reverse', () => {
+    const low = calculateValuation({ ...base, baseRevenueGrowth: -5, exitMultiple: 5 })
+    expect(low.expectedCagr).not.toBeNull()
+    expect(low.cagrGate).toBe('block')
+    const missing = calculateValuation({ ...base, currentRevenue: null })
+    expect(missing.expectedCagr).toBeNull()
+    expect(missing.cagrGate).toBe('unknown')
+  })
+  it('an unknown CAGR never restricts BUY through the verdict path', () => {
+    const missing = calculateValuation({ ...base, currentEnterpriseValue: null })
+    // VerdictPage re-derives the gate from the CAGR, exactly like this:
+    const derived = cagrGateFor(missing.expectedCagr, 12)
+    expect(derived).toBeNull()
+    const r = calculateVerdict(allAxes(5), std, undefined, { cagrGate: derived })
+    expect(r.verdict).toBe('BUY')
+    expect(r.cagrBlocked).toBe(false)
+  })
+})
+
+describe('calculateDataCoverage — three-way split (present / missing / not applicable)', () => {
+  const fin = NOT_APPLICABLE_METRICS['financials']!
+  it('an unavailable metric is missing under generic, not applicable under financials', () => {
+    const generic = calculateDataCoverage(emptyInput)
+    expect(generic.statuses?.grossMargin).toBe('missing')
+    const bank = calculateDataCoverage(emptyInput, fin)
+    expect(bank.statuses?.grossMargin).toBe('notApplicable')
+    expect(bank.naReasons?.grossMargin).toBe('financials_no_gross_margin')
+    expect(bank.statuses?.revenueGrowthYoy).toBe('missing')
+  })
+  it('NA metrics leave the denominator: a fully-entered bank has complete coverage of what applies', () => {
+    const cov = calculateDataCoverage(input({
+      revenueGrowthYoy: 5, roic: 12, shareDilutionAnnual: 0.5, operatingMargin: 30,
+    }), fin)
+    expect(cov.totalMetrics).toBe(4)
+    expect(cov.usedMetrics).toBe(4)
+    expect(cov.overall).toBe(1)
+  })
+  it('a score with zero applicable metrics is insufficient even though nothing is "missing"', () => {
+    const cov = calculateDataCoverage(input({
+      revenueGrowthYoy: 5, roic: 12, shareDilutionAnnual: 0.5, operatingMargin: 30,
+    }), fin)
+    // Financials: balanceSheetSafety reads only debtToEbitda + currentRatio,
+    // both not applicable -> no valid solvency basis in this score.
+    expect(cov.perScoreApplicable?.balanceSheetSafety).toBe(0)
+    expect(isScoreInsufficient(cov, 'balanceSheetSafety')).toBe(true)
+    expect(isScoreInsufficient(cov, 'businessQuality')).toBe(false)
+    expect(isScoreInsufficient(cov, 'capitalEfficiency')).toBe(false)
+    expect(isScoreInsufficient(cov, 'cashGeneration')).toBe(false)
+  })
+  it('an entered value for an NA metric does not resurrect it into the denominator', () => {
+    const cov = calculateDataCoverage(input({ grossMargin: 30 }), fin)
+    expect(cov.statuses?.grossMargin).toBe('notApplicable')
+    expect(cov.totalMetrics).toBe(4)
+    expect(cov.usedMetrics).toBe(0)
+  })
+  it('legacy coverage objects (no perScoreApplicable) still answer isScoreInsufficient', () => {
+    const legacy: DataCoverage = {
+      perScore: { businessQuality: 0.5, capitalEfficiency: 0, balanceSheetSafety: 1, cashGeneration: 0.25 },
+      overall: 0.44, usedMetrics: 3.5, totalMetrics: 8,
+    }
+    expect(isScoreInsufficient(legacy, 'businessQuality')).toBe(false)
+    expect(isScoreInsufficient(legacy, 'capitalEfficiency')).toBe(true)
+    expect(isScoreInsufficient(legacy, 'cashGeneration')).toBe(true)
+  })
+})
+
+describe('evaluateFinancialRisk — explicit level, unevaluable is not normal', () => {
+  it('no readable rule inputs -> unevaluable with no flags', () => {
+    const r = evaluateFinancialRisk(emptyInput)
+    expect(r.level).toBe('unevaluable')
+    expect(r.flags).toEqual([])
+  })
+  it('a single margin alone does not make the screen evaluable (pair rule unreadable)', () => {
+    expect(evaluateFinancialRisk(input({ operatingMargin: 20 })).level).toBe('unevaluable')
+    expect(evaluateFinancialRisk(input({ debtToEbitda: 1 })).level).toBe('normal')
+  })
+  it('clean readable input -> normal; caution-only -> caution; any severe -> severe', () => {
+    expect(evaluateFinancialRisk(input({
+      debtToEbitda: 1, operatingMargin: 20, fcfMargin: 15,
+      shareDilutionAnnual: 0, revenueGrowthYoy: 10, revenueGrowth3y: 8,
+      goodwillIntangiblesToAssets: 20,
+    })).level).toBe('normal')
+    expect(evaluateFinancialRisk(input({ debtToEbitda: 4.5 })).level).toBe('caution')
+    expect(evaluateFinancialRisk(input({ debtToEbitda: 4.5, goodwillIntangiblesToAssets: 80 })).level).toBe('severe')
+  })
+  it('severe risk flags never auto-veto: the verdict engine has no flag input', () => {
+    const risky = evaluateFinancialRisk(input({ debtToEbitda: 9, goodwillIntangiblesToAssets: 85 }))
+    expect(risky.level).toBe('severe')
+    // calculateVerdict takes axes + gate only; identical axes give an
+    // identical verdict regardless of the risk screen's state.
+    expect(calculateVerdict(allAxes(5), std).verdict).toBe('BUY')
+    expect(calculateVerdict(allAxes(5), std).vetoCount).toBe(0)
+  })
+})
+
+describe('sufficientDataScores — insufficient scores never flow downstream as neutral', () => {
+  const fin = NOT_APPLICABLE_METRICS['financials']!
+  it('full coverage passes every score through', () => {
+    const inp = input({
+      revenueGrowthYoy: 10, grossMargin: 50, roic: 20, shareDilutionAnnual: 0,
+      debtToEbitda: 1, currentRatio: 2, fcfMargin: 15, operatingMargin: 20,
+    })
+    const ok = sufficientDataScores(calculateDataScores(inp), calculateDataCoverage(inp))
+    expect(Object.keys(ok)).toHaveLength(4)
+  })
+  it('financials: balanceSheetSafety (zero applicable metrics) is omitted, others kept', () => {
+    const inp = input({ revenueGrowthYoy: 5, roic: 12, shareDilutionAnnual: 0.5, operatingMargin: 30 })
+    const ok = sufficientDataScores(calculateDataScores(inp), calculateDataCoverage(inp, fin))
+    expect(ok.balanceSheetSafety).toBeUndefined()
+    expect(ok.businessQuality).toBeDefined()
+    expect(ok.capitalEfficiency).toBeDefined()
+    expect(ok.cashGeneration).toBeDefined()
+  })
+  it('empty input omits everything instead of suggesting four neutral 3s', () => {
+    const ok = sufficientDataScores(calculateDataScores(emptyInput), calculateDataCoverage(emptyInput))
+    expect(ok).toEqual({})
+  })
+})
+
+describe('buildDataSummary — insufficient scores are annotated, never silent', () => {
+  it('annotates only the insufficient lines when coverage is supplied', () => {
+    const inp = input({ revenueGrowthYoy: 5, roic: 12, shareDilutionAnnual: 0.5, operatingMargin: 30 })
+    const fin = NOT_APPLICABLE_METRICS['financials']!
+    const summary = buildDataSummary(calculateDataScores(inp), inp, calculateDataCoverage(inp, fin))
+    expect(summary).toContain('Balance Sheet Safety: 3/5 (insufficient — 判定不能)')
+    expect(summary).not.toContain('Business Quality: 3/5 (insufficient')
+  })
+  it('without coverage the legacy format is unchanged', () => {
+    const summary = buildDataSummary(calculateDataScores(emptyInput), emptyInput)
+    expect(summary).toContain('Balance Sheet Safety: 3/5')
+    expect(summary).not.toContain('insufficient')
   })
 })
