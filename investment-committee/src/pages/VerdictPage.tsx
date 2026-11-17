@@ -16,6 +16,7 @@ import { NOT_APPLICABLE_METRICS, type PresetId } from '../lib/industryPresets'
 import type { VerdictAxes, AxisScore, VerdictReport, DataAnalysis, MarketAnalysis, RiskFlag } from '../types/domain'
 import { VERDICT_PROFILES } from '../types/domain'
 import { generateVerdictDraft, applyDraftToAxes } from '../features/verdictEngine/service'
+import DecisionLogPanel from '../features/decisionLog/DecisionLogPanel'
 import { generateStyleReview, type StyleReviewResult } from '../features/styleReview/service'
 
 // ── Investment style ──────────────────────────────────────────────────────
@@ -139,6 +140,7 @@ export default function VerdictPage() {
   const [axes, setAxes] = useState<VerdictAxes>(emptyAxes())
   const [rationale, setRationale] = useState('')
   const [saved, setSaved] = useState<VerdictReport | null>(null)
+  const [showLogPanel, setShowLogPanel] = useState(false)
   const [loading, setLoading] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [valuationCagr, setValuationCagr] = useState<number | null>(null)
@@ -367,6 +369,9 @@ export default function VerdictPage() {
               {aiLoading ? t('verdictAiGenerating', lang) : t('verdictAiBtn', lang)}
             </Button>
             <Button onClick={handleSave} loading={loading} accent={T.pink}>{t('saveVerdict', lang)}</Button>
+            {saved && company && (
+              <Button onClick={() => setShowLogPanel(true)} accent={T.cyan}>{t('decisionLogRecord', lang)}</Button>
+            )}
           </div>
         }
       >
@@ -558,6 +563,14 @@ export default function VerdictPage() {
 
         {saved && <div style={{ color: T.textDim, fontSize: 10, marginTop: 8 }}>Last saved: {saved.createdAt.slice(0, 16)}</div>}
       </PageLayout>
+      {showLogPanel && company && (
+        <DecisionLogPanel
+          company={company}
+          verdict={saved}
+          onClose={() => setShowLogPanel(false)}
+          onSaved={() => setShowLogPanel(false)}
+        />
+      )}
     </div>
   )
 }
