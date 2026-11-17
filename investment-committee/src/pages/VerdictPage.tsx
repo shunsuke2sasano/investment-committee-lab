@@ -11,8 +11,9 @@ import {
   verdictRepository, valuationRepository, dataAnalysisRepository,
   marketAnalysisRepository, thesisRepository, reviewRepository,
 } from '../db/repositories'
-import { calculateVerdict, cagrGateFor, DEFAULT_CAGR_GATE_MIN } from '../lib/calculators'
-import type { VerdictAxes, AxisScore, VerdictReport, DataAnalysis, MarketAnalysis } from '../types/domain'
+import { calculateVerdict, cagrGateFor, DEFAULT_CAGR_GATE_MIN, assessFinancialRisk, evaluateFinancialRisk, isSuspiciouslyHighCagr, calculateDataCoverage, sufficientDataScores } from '../lib/calculators'
+import { NOT_APPLICABLE_METRICS, type PresetId } from '../lib/industryPresets'
+import type { VerdictAxes, AxisScore, VerdictReport, DataAnalysis, MarketAnalysis, RiskFlag } from '../types/domain'
 import { VERDICT_PROFILES } from '../types/domain'
 import { generateVerdictDraft, applyDraftToAxes } from '../features/verdictEngine/service'
 import { generateStyleReview, type StyleReviewResult } from '../features/styleReview/service'
@@ -83,9 +84,16 @@ function gapToScore(gap: number): 1 | 2 | 3 | 4 | 5 {
 function buildFeed(data: DataAnalysis | null | undefined, market: MarketAnalysis | null | undefined): LaneFeed {
   const feed: LaneFeed = {}
   if (data) {
-    feed.businessQuality    = { score: data.scores.businessQuality,    source: 'data',   detail: `BQ ${data.scores.businessQuality}/5` }
-    feed.capitalEfficiency  = { score: data.scores.capitalEfficiency,  source: 'data',   detail: `CE ${data.scores.capitalEfficiency}/5` }
-    feed.balanceSheetSafety = { score: data.scores.balanceSheetSafety, source: 'data',   detail: `BS ${data.scores.balanceSheetSafety}/5` }
+    // Only sufficiently-grounded scores may be suggested. An insufficient
+    // score (e.g. balanceSheetSafety for financials, where both of its
+    // metrics are not applicable) is omitted entirely — suggesting its
+    // raw number would smuggle an unevaluable "neutral 3" into the verdict.
+    const na = NOT_APPLICABLE_METRICS[(data.presetId as PresetId | undefined) ?? 'generic'] ?? {}
+    const coverage = data.coverage ?? calculateDataCoverage(data.input, na)
+    const ok = sufficientDataScores(data.scores, coverage)
+    if (ok.businessQuality !== undefined)    feed.businessQuality    = { score: ok.businessQuality,    source: 'data', detail: `BQ ${ok.businessQuality}/5` }
+    if (ok.capitalEfficiency !== undefined)  feed.capitalEfficiency  = { score: ok.capitalEfficiency,  source: 'data', detail: `CE ${ok.capitalEfficiency}/5` }
+    if (ok.balanceSheetSafety !== undefined) feed.balanceSheetSafety = { score: ok.balanceSheetSafety, source: 'data', detail: `BS ${ok.balanceSheetSafety}/5` }
   }
   if (market?.outputs.marketExpectationGap != null) {
     const gap = market.outputs.marketExpectationGap
@@ -134,6 +142,9 @@ export default function VerdictPage() {
   const [loading, setLoading] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [valuationCagr, setValuationCagr] = useState<number | null>(null)
+  const [valuationExists, setValuationExists] = useState(false)
+  const [riskFlags, setRiskFlags] = useState<RiskFlag[]>([])
+  const [riskLevel, setRiskLevel] = useState<'normal' | 'caution' | 'severe' | 'unevaluable' | null>(null)
   const [investmentStyle, setInvestmentStyle] = useState<InvestmentStyle>(PROFILE_TO_STYLE[activeProfile.id] ?? 'navigator')
   const [feed, setFeed] = useState<LaneFeed>({})
   const [styleReviews, setStyleReviews] = useState<Partial<Record<InvestmentStyle, StyleReviewResult>>>({})
@@ -156,6 +167,13 @@ export default function VerdictPage() {
         setInvestmentStyle(PROFILE_TO_STYLE[verdict.profileUsed.id] ?? 'navigator')
       }
       setValuationCagr(valuation?.expectedCagr ?? null)
+      setValuationExists(valuation != null)
+      // Risk screen: use the flags saved with the Data analysis; for legacy
+      // records saved before Phase 2, recompute them from the stored input.
+      setRiskFlags(data?.riskFlags ?? (data ? assessFinancialRisk(data.input, data.periods) : []))
+      // Explicit risk state: use the stored level; legacy records derive it
+      // from their saved inputs. No Data analysis at all = nothing to show.
+      setRiskLevel(data ? (data.riskLevel ?? evaluateFinancialRisk(data.input, data.periods).level) : null)
       setFeed(buildFeed(data, market))
     })
   }, [companyId])
@@ -352,6 +370,23 @@ export default function VerdictPage() {
           </div>
         }
       >
+        {/* Valuation unverified: no report, or CAGR not calculable. The
+            gate cannot block here (unknown ≠ block), but the user must see
+            that this verdict has no price-side backing before relying on it. */}
+        {valuationCagr === null && (
+          <div style={{ border: `2px solid ${T.orange}`, background: `rgba(${hexRgb(T.orange)},0.08)`, padding: '14px 20px', marginBottom: 20 }}>
+            <div style={{ color: T.orange, fontSize: 12, fontWeight: 700, letterSpacing: 2 }}>
+              ⚠ VALUATION UNVERIFIED — バリュエーション未検証
+            </div>
+            <div style={{ color: T.textDim, fontSize: 11, marginTop: 4 }}>
+              {valuationExists
+                ? 'Valuationは保存されていますが、期待CAGRが計算できていません（入力不足）。ゲート判定は「計算不可」であり、ブロックではありません。'
+                : 'Valuationが未実施のため、期待CAGRによる裏付けがありません。'}
+              この状態でBUY判定を保存できますが、価格面の根拠がない判定として扱ってください。
+            </div>
+          </div>
+        )}
+
         {/* Valuation gate warning */}
         {cagrBlocked && (
           <div style={{ border: `2px solid ${T.red}`, background: `rgba(${hexRgb(T.red)},0.08)`, padding: '14px 20px', marginBottom: 20 }}>
@@ -363,6 +398,45 @@ export default function VerdictPage() {
             </div>
             <div style={{ color: T.textDim, fontSize: 11, marginTop: 4 }}>
               ブロックは「買うな」ではなく、成長率や倍率の想定が厳しすぎないか確認する合図です。想定に自信がある場合は、Valuationの前提を見直してから再判定してください。
+            </div>
+          </div>
+        )}
+
+        {/* Suspiciously high CAGR warning (gate pass, but likely a value trap) */}
+        {cagrGate === 'pass' && isSuspiciouslyHighCagr(valuationCagr) && (
+          <div style={{ border: `2px solid ${T.orange}`, background: `rgba(${hexRgb(T.orange)},0.08)`, padding: '14px 20px', marginBottom: 20 }}>
+            <div style={{ color: T.orange, fontSize: 12, fontWeight: 700, letterSpacing: 2 }}>
+              ⚠ 期待CAGRが極端に高い pass です（{valuationCagr!.toFixed(1)}%）
+            </div>
+            <div style={{ color: T.textDim, fontSize: 11, marginTop: 4 }}>
+              ゲートは通過していますが、暴落した問題企業ほど機械計算では「割安で高リターン」に見えます。割安の根拠が「株価が下がったから」だけになっていないか、Valuationの前提を確認してください。
+            </div>
+          </div>
+        )}
+
+        {/* Risk screen could not be evaluated: say so, never imply "normal" */}
+        {riskLevel === 'unevaluable' && (
+          <div style={{ border: `1px solid ${T.borderDim}`, padding: '10px 20px', marginBottom: 20 }}>
+            <span style={{ color: T.textDim, fontSize: 11 }}>
+              財務リスクスクリーン: データ不足のため評価不能です（リスクが無いという意味ではありません）。Data Laneで指標を入力してください。
+            </span>
+          </div>
+        )}
+
+        {/* Financial risk screen warning (severe flags = veto candidates) */}
+        {riskFlags.some(f => f.severity === 'severe') && (
+          <div style={{ border: `2px solid ${T.orange}`, background: `rgba(${hexRgb(T.orange)},0.08)`, padding: '14px 20px', marginBottom: 20 }}>
+            <div style={{ color: T.orange, fontSize: 12, fontWeight: 700, letterSpacing: 2 }}>
+              ⚠ FINANCIAL RISK SCREEN — 重大なリスクフラグがあります
+            </div>
+            {riskFlags.filter(f => f.severity === 'severe').map(f => (
+              <div key={f.id} style={{ color: T.textDim, fontSize: 11, marginTop: 4 }}>
+                {f.label} — {f.detail}
+                {f.vetoAxis ? `（対象軸: ${f.vetoAxis} のVETO候補）` : ''}
+              </div>
+            ))}
+            <div style={{ color: T.textDim, fontSize: 11, marginTop: 4 }}>
+              フラグは品質スコアとは独立した審査です。該当軸でVETOを設定するか、反証を確認してから判定してください。
             </div>
           </div>
         )}
