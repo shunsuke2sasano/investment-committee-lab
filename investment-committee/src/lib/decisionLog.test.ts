@@ -1,7 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   buildDecisionLogDraft, computeEvaluationReturns, emptyBenchmarkSnapshot,
-  emptyPriceSnapshot, isRetrospective, pickSectionAsOf, resolveCagrGateMinUsed,
+  emptyPriceSnapshot, fromDateTimeLocalValue, isRetrospective, localDateString,
+  pickSectionAsOf, resolveCagrGateMinUsed, toDateTimeLocalValue,
+  validateEvaluationHorizon,
 } from './decisionLog'
 import type {
   CompanyCase, DataAnalysis, ThesisAnalysis, ValuationReport, VerdictReport,
@@ -180,6 +182,73 @@ describe('buildDecisionLogDraft', () => {
       expect.arrayContaining(['missing_price', 'missing_price_date', 'missing_price_source', 'version_unknown']),
     )
   })
+
+  it('unknown build version limits model comparison only, not price returns (BLOCKER 4)', () => {
+    const d = draftBase({ buildCommit: null })
+    expect(d.modelComparisonEligible).toBe(false)
+    expect(d.comparisonStatus).toBe('evaluable')
+    expect(d.benchmarkComparisonStatus).toBe('evaluable')
+    expect(d.comparisonExclusions).toContain('version_unknown')
+  })
+
+  it('a price dated after the decision cannot pose as a decision-time price (BLOCKER 2)', () => {
+    const d = draftBase({
+      priceAtDecision: {
+        price: 100, priceDate: '2026-06-03', recordedAt: NOW, currency: 'USD',
+        priceType: 'raw', adjustmentBasis: null, source: 'manual',
+      },
+    })
+    expect(d.comparisonStatus).toBe('not_evaluable')
+    expect(d.comparisonExclusions).toContain('price_after_decision')
+  })
+
+  it('missing SPY decision price blocks only the benchmark comparison (BLOCKER 3)', () => {
+    const d = draftBase({
+      benchmarkPrice: {
+        ...emptyBenchmarkSnapshot(NOW), price: null, priceDate: null, source: null,
+      },
+    })
+    expect(d.comparisonStatus).toBe('evaluable')
+    expect(d.benchmarkComparisonStatus).toBe('not_evaluable')
+    expect(d.comparisonExclusions).toEqual(expect.arrayContaining([
+      'missing_benchmark_price', 'missing_benchmark_price_date', 'missing_benchmark_price_source',
+    ]))
+  })
+})
+
+describe('local time conversion (BLOCKER 2)', () => {
+  it('round-trips display → edit → save without moving the moment', () => {
+    for (const iso of ['2026-06-01T12:00:00.000Z', '2026-01-15T03:45:00.000Z', '2026-12-31T23:59:00.000Z']) {
+      expect(fromDateTimeLocalValue(toDateTimeLocalValue(iso))).toBe(iso)
+    }
+  })
+
+  it('shows the JST local time across the UTC date boundary', () => {
+    vi.stubEnv('TZ', 'Asia/Tokyo')
+    try {
+      // 2026-06-01 15:30 UTC is 2026-06-02 00:30 in Tokyo.
+      expect(toDateTimeLocalValue('2026-06-01T15:30:00.000Z')).toBe('2026-06-02T00:30')
+      expect(localDateString(new Date('2026-06-01T15:30:00.000Z'))).toBe('2026-06-02')
+      expect(fromDateTimeLocalValue('2026-06-02T00:30')).toBe('2026-06-01T15:30:00.000Z')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+})
+
+describe('validateEvaluationHorizon (BLOCKER 3)', () => {
+  const decided = '2026-06-01T12:00:00.000Z'
+  it('rejects a horizon that has not elapsed', () => {
+    expect(validateEvaluationHorizon(decided, '2026-06-01', 60).ok).toBe(false)
+    expect(validateEvaluationHorizon(decided, '2027-05-31', 12).ok).toBe(false)
+  })
+  it('accepts the horizon inside the pre-registered [h, h+2) month window', () => {
+    expect(validateEvaluationHorizon(decided, '2027-06-01', 12)).toEqual({ ok: true, elapsedMonths: 12 })
+    expect(validateEvaluationHorizon(decided, '2027-07-15', 12).ok).toBe(true)
+  })
+  it('rejects a date that belongs to a longer horizon', () => {
+    expect(validateEvaluationHorizon(decided, '2027-08-01', 12).ok).toBe(false)
+  })
 })
 
 describe('isRetrospective', () => {
@@ -241,6 +310,31 @@ describe('computeEvaluationReturns (P0-3 gating)', () => {
     expect(r.stockReturnPct).toBeNull()
     expect(r.excessReturnPct).toBeNull()
     expect(r.note).toContain('stock return not computed')
+  })
+  it('returns null excess when the SPY decision price is missing (BLOCKER 3)', () => {
+    const r = computeEvaluationReturns({
+      decisionPrice: dec,
+      priceNow: { ...dec, price: 120 },
+      decisionBenchmark: { ...decBench, price: null },
+      benchmarkNow: { ...decBench, price: 550 },
+    })
+    expect(r.stockReturnPct).toBeCloseTo(20)
+    expect(r.benchmarkReturnPct).toBeNull()
+    expect(r.excessReturnPct).toBeNull()
+  })
+  it('returns null excess when stock and SPY adjustment conditions differ (BLOCKER 3)', () => {
+    const adj = { priceType: 'adjusted' as const, adjustmentBasis: 'split_dividend_adjusted' }
+    const r = computeEvaluationReturns({
+      decisionPrice: { ...dec, ...adj },
+      priceNow: { ...dec, price: 120, ...adj },
+      decisionBenchmark: decBench,
+      benchmarkNow: { ...decBench, price: 550 },
+    })
+    expect(r.stockReturnPct).toBeCloseTo(20)
+    expect(r.benchmarkReturnPct).toBeCloseTo(10)
+    // Each leg is internally consistent, but an adjusted stock return and
+    // a raw SPY return are not the same quantity — no excess is shown.
+    expect(r.excessReturnPct).toBeNull()
   })
   it('returns null excess when currencies differ between stock and benchmark', () => {
     const r = computeEvaluationReturns({

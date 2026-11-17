@@ -12,7 +12,8 @@ const log: DecisionLogRecord = {
   decisionSessionId: null, candidateSource: null, aiReviewUsed: false, engineVersionOrNone: null,
   priceAtDecision: { ...emptyPriceSnapshot(NOW), price: 100, priceDate: '2026-05-29', source: 'manual' },
   benchmarkPrice: { ...emptyBenchmarkSnapshot(NOW), price: 500, priceDate: '2026-05-29', source: 'manual' },
-  extraBenchmarks: [], comparisonStatus: 'evaluable', comparisonExclusions: [],
+  extraBenchmarks: [], comparisonStatus: 'evaluable', benchmarkComparisonStatus: 'evaluable',
+  modelComparisonEligible: true, comparisonExclusions: [],
   verdictReportId: 'v1', verdictResult: 'BUY', humanFinalDecision: 'buy', previousLogId: null,
   axisScores: null, totalScore: 30, vetoCount: 0, profileUsed: null, rationale: 'r',
   dataAnalysisId: 'd1', scores: null, coverage: null, riskLevel: 'normal', riskFlags: null,
@@ -51,12 +52,12 @@ describe('decisionLogsToCsv', () => {
     const csv = decisionLogsToCsv([{ ...log, companyName: 'Test Inc' }], [evaluation])
     const row = csv.trim().split('\n')[1]
     const cells = row.split(',')
-    // 17 base columns, then 12m stock/benchmark/excess at positions 17..19
-    expect(cells[17]).toBe('20')
-    expect(cells[18]).toBe('10')
-    expect(cells[19]).toBe('10')
+    // 19 base columns, then 12m stock/benchmark/excess at positions 19..21
+    expect(cells[19]).toBe('20')
+    expect(cells[20]).toBe('10')
+    expect(cells[21]).toBe('10')
     // 36m/60m columns are empty
-    expect(cells[20]).toBe('')
+    expect(cells[22]).toBe('')
   })
   it('leaves evaluation columns empty when no evaluation exists', () => {
     const csv = decisionLogsToCsv([log], [])

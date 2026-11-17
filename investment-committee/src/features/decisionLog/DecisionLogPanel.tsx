@@ -5,7 +5,8 @@ import { t } from '../../lib/i18n'
 import { decisionLogRepository, settingsRepository } from '../../db/repositories'
 import {
   buildDecisionLogDraft, emptyBenchmarkSnapshot, emptyPriceSnapshot,
-  isRetrospective, resolveCagrGateMinUsed,
+  fromDateTimeLocalValue, isRetrospective, localDateString, resolveCagrGateMinUsed,
+  toDateTimeLocalValue,
   type DecisionLogDraft,
 } from '../../lib/decisionLog'
 import { APP_VERSION, BUILD_COMMIT } from '../../lib/version'
@@ -37,6 +38,12 @@ interface Props {
    * loaded from storage — past settings cannot be reconstructed, so the
    * log then records the gate minimum as unknown. */
   frozenCagrGateMin?: number | null
+  /** True when the verdict was saved in this session (the log is the
+   * forward record of that save). A verdict loaded from storage is a
+   * past decision being re-recorded: the log is retrospective and
+   * today's prices are not prefilled as if they were decision-time
+   * observations (PR #7 review, BLOCKER 2). */
+  verdictSavedInSession?: boolean
   onClose: () => void
   onSaved: (rec: DecisionLogRecord) => void
 }
@@ -45,31 +52,38 @@ function verdictToKind(v: 'BUY' | 'WATCH' | 'PASS'): DecisionKind {
   return v === 'BUY' ? 'buy' : v === 'WATCH' ? 'watch' : 'pass'
 }
 
-function todayStr(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
-export default function DecisionLogPanel({ company, verdict, frozenCagrGateMin, onClose, onSaved }: Props) {
+export default function DecisionLogPanel({ company, verdict, frozenCagrGateMin, verdictSavedInSession, onClose, onSaved }: Props) {
   const lang = useStore(s => s.lang)
   const showToast = useStore(s => s.showToast)
   const [sources, setSources] = useState<Sources | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const [decidedAt, setDecidedAt] = useState<string>(verdict?.createdAt ?? new Date().toISOString())
+  // First-render facts used only for initial form values: a stored
+  // verdict being logged later is a retrospective re-record, so today's
+  // currentPrice must not be prefilled as the decision-time price.
+  const openedAt = useMemo(() => new Date().toISOString(), [])
+  const initialDecidedAt = verdict?.createdAt ?? openedAt
+  const initiallyRetrospective = isRetrospective(
+    initialDecidedAt, openedAt, verdict != null && !verdictSavedInSession)
+
+  const [decidedAt, setDecidedAt] = useState<string>(initialDecidedAt)
   const [decidedAtEdited, setDecidedAtEdited] = useState(false)
   const [decision, setDecision] = useState<DecisionKind>(verdict ? verdictToKind(verdict.verdict) : 'pass')
   const [rationale, setRationale] = useState<string>(verdict?.rationale ?? '')
 
   // Stock price form
-  const [price, setPrice] = useState<string>(company.currentPrice != null ? String(company.currentPrice) : '')
-  const [priceDate, setPriceDate] = useState<string>(todayStr())
+  const [price, setPrice] = useState<string>(
+    !initiallyRetrospective && company.currentPrice != null ? String(company.currentPrice) : '')
+  const [priceDate, setPriceDate] = useState<string>(
+    initiallyRetrospective ? localDateString(new Date(initialDecidedAt)) : localDateString(new Date()))
   const [currency, setCurrency] = useState<'USD' | 'JPY'>('USD')
   const [priceType, setPriceType] = useState<PriceType>('raw')
   const [adjustmentBasis, setAdjustmentBasis] = useState<string>('')
   const [priceSource, setPriceSource] = useState<string>('manual')
   // SPY benchmark form
   const [benchPrice, setBenchPrice] = useState<string>('')
-  const [benchPriceDate, setBenchPriceDate] = useState<string>(todayStr())
+  const [benchPriceDate, setBenchPriceDate] = useState<string>(
+    initiallyRetrospective ? localDateString(new Date(initialDecidedAt)) : localDateString(new Date()))
 
   useEffect(() => {
     let cancelled = false
@@ -104,12 +118,16 @@ export default function DecisionLogPanel({ company, verdict, frozenCagrGateMin, 
       adjustmentBasis: priceType === 'adjusted' ? (adjustmentBasis.trim() || null) : null,
       source: priceSource.trim() || null,
     }
-    const retro = isRetrospective(decidedAt, nowIso, decidedAtEdited)
+    // A stored verdict logged later counts as an explicitly past moment
+    // even on the same day; only an in-session verdict save is bound to
+    // the flow (date-based rule).
+    const explicit = decidedAtEdited || (verdict != null && !verdictSavedInSession)
+    const retro = isRetrospective(decidedAt, nowIso, explicit)
     return buildDecisionLogDraft({
       company,
       entrySource: verdict ? 'verdict_save' : 'manual',
       decidedAt,
-      decidedAtExplicit: decidedAtEdited,
+      decidedAtExplicit: explicit,
       createdAt: nowIso,
       referenceTime: verdict?.createdAt ?? decidedAt,
       verdict,
@@ -132,11 +150,30 @@ export default function DecisionLogPanel({ company, verdict, frozenCagrGateMin, 
       rationale,
       candidateSource: verdict ? null : 'ad_hoc',
     })
-  }, [sources, company, verdict, decidedAt, decidedAtEdited, frozenCagrGateMin, decision, rationale, price, priceDate,
+  }, [sources, company, verdict, decidedAt, decidedAtEdited, verdictSavedInSession, frozenCagrGateMin, decision, rationale, price, priceDate,
       currency, priceType, adjustmentBasis, priceSource, benchPrice, benchPriceDate])
 
   async function handleSave() {
     if (!draft) return
+    // Input validation (PR #7 review): the rationale is required, prices
+    // must be finite positive numbers when given, and neither the
+    // decision moment nor a price's market date may lie in the future.
+    if (rationale.trim() === '') {
+      showToast(t('decisionLogRationaleRequired', lang), 'error')
+      return
+    }
+    const badNumber = (s: string) =>
+      s.trim() !== '' && (!Number.isFinite(Number(s)) || Number(s) <= 0)
+    if (badNumber(price) || badNumber(benchPrice)) {
+      showToast(t('decisionLogInvalidPrice', lang), 'error')
+      return
+    }
+    const todayLocal = localDateString(new Date())
+    if (new Date(decidedAt).getTime() > Date.now() + 5 * 60_000
+      || priceDate > todayLocal || benchPriceDate > todayLocal) {
+      showToast(t('decisionLogFutureDate', lang), 'error')
+      return
+    }
     setSaving(true)
     try {
       const rec = await decisionLogRepository.create(draft)
@@ -176,8 +213,8 @@ export default function DecisionLogPanel({ company, verdict, frozenCagrGateMin, 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Input
                 label={t('decisionLogDecidedAt', lang)} type="datetime-local"
-                value={decidedAt.slice(0, 16)}
-                onChange={v => { setDecidedAt(new Date(v).toISOString()); setDecidedAtEdited(true) }}
+                value={toDateTimeLocalValue(decidedAt)}
+                onChange={v => { setDecidedAt(fromDateTimeLocalValue(v)); setDecidedAtEdited(true) }}
               />
               <Select
                 label={t('decisionLogFinalDecision', lang)} value={decision}
@@ -209,6 +246,11 @@ export default function DecisionLogPanel({ company, verdict, frozenCagrGateMin, 
                 ? t('decisionLogEvaluable', lang)
                 : `${t('decisionLogNotEvaluable', lang)} (${draft.comparisonExclusions.join(', ')})`}
               {draft.retrospective && <span> · {t('decisionLogRetrospective', lang)}</span>}
+            </div>
+            <div style={{ fontSize: 11, color: draft.benchmarkComparisonStatus === 'evaluable' ? T.green : T.orange }}>
+              vs SPY: {draft.benchmarkComparisonStatus === 'evaluable'
+                ? t('decisionLogEvaluable', lang)
+                : t('decisionLogNotEvaluable', lang)}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 8 }}>

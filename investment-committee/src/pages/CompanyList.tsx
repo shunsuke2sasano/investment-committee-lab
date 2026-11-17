@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { T, Button, VerdictBadge, PageLayout, hexRgb } from '../components/common/ui'
 import { useStore } from '../state/store'
-import { companyRepository, exportImport, monitoringRepository, verdictRepository } from '../db/repositories'
+import { companyRepository, decisionLogRepository, exportImport, monitoringRepository, verdictRepository } from '../db/repositories'
+import { verifyLogBody } from '../lib/decisionLogHash'
 import type { CompanyCase, VerdictResult } from '../types/domain'
 import { t } from '../lib/i18n'
 
@@ -84,6 +85,19 @@ export default function CompanyList() {
     const companies = await companyRepository.list()
     setCompanies(companies)
     showToast(t('importDone', lang), 'success')
+    // Post-import integrity check (PR #7 review): a backup whose decision
+    // logs were edited after export must surface as a warning, not pass
+    // silently. Verification covers records and evaluations; events are
+    // verified when the log page loads them.
+    const [importedLogs, importedEvals] = await Promise.all([
+      decisionLogRepository.list(), decisionLogRepository.listEvaluations(),
+    ])
+    let tampered = false
+    for (const l of importedLogs) if (!await verifyLogBody(l)) { tampered = true; break }
+    if (!tampered) {
+      for (const e of importedEvals) if (!await verifyLogBody(e)) { tampered = true; break }
+    }
+    if (tampered) showToast(t('decisionLogImportTamper', lang), 'error')
   }
 
   return (

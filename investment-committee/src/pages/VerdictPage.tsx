@@ -574,6 +574,7 @@ export default function VerdictPage() {
           company={company}
           verdict={saved}
           frozenCagrGateMin={gateMinAtSave}
+          verdictSavedInSession={gateMinAtSave != null}
           onClose={() => setShowLogPanel(false)}
           onSaved={() => setShowLogPanel(false)}
         />

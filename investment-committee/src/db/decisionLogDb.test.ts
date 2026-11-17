@@ -112,6 +112,31 @@ describe('decisionLogRepository.create', () => {
     expect(await decisionLogRepository.listEvents(rec.id)).toHaveLength(2)
     expect(await decisionLogRepository.listEvaluations(rec.id)).toHaveLength(1)
   })
+
+  it('detects tampering with an event or an evaluation (regression 8)', async () => {
+    const rec = await decisionLogRepository.create(makeDraft('2026-06-01T10:00:00.000Z'))
+    const ev = await decisionLogRepository.addEvent({
+      logId: rec.id, type: 'note_added', at: '2026-06-02T00:00:00.000Z',
+      note: 'original note', payload: null,
+    })
+    const evaluation = await decisionLogRepository.addEvaluation({
+      logId: rec.id, horizonMonths: 12, evaluatedAt: '2027-06-01T00:00:00.000Z',
+      priceNow: { ...emptyPriceSnapshot(NOW), price: 110 },
+      benchmarkPriceNow: null, stockReturnPct: 10, benchmarkReturnPct: null,
+      excessReturnPct: null, note: null,
+    })
+    expect(await verifyLogBody(ev)).toBe(true)
+    expect(await verifyLogBody(evaluation)).toBe(true)
+    // Rewrite history directly in the store, bypassing the repository.
+    await db.decision_log_events.update(ev.id, { note: 'rewritten note' })
+    await db.decision_log_evaluations.update(evaluation.id, { stockReturnPct: 999 })
+    const events = await decisionLogRepository.listEvents(rec.id)
+    const evals = await decisionLogRepository.listEvaluations(rec.id)
+    expect(await verifyLogBody(events.find(e => e.id === ev.id)!)).toBe(false)
+    expect(await verifyLogBody(evals[0])).toBe(false)
+    // The frozen record itself is untouched and still verifies.
+    expect(await verifyLogBody((await decisionLogRepository.get(rec.id))!)).toBe(true)
+  })
 })
 
 describe('export / import', () => {

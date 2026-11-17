@@ -90,18 +90,103 @@ export function pickSectionAsOf<T extends { id: string }>(
   return { verified: null, ref: { id: null, sourceAt: null, asOfStatus: 'absent' } }
 }
 
+// ─── Local-time helpers ──────────────────────────────────────────────
+// Decision moments are stored as UTC ISO strings, but users think and
+// type in local time. Converting through the UTC string's date/time
+// components (e.g. iso.slice(0, 16) into a datetime-local input) shifts
+// the displayed moment by the timezone offset and corrupts edits, so
+// every display/edit path goes through these helpers (PR #7 review).
+
+/** 'YYYY-MM-DD' in the runtime's local timezone for a Date. */
+export function localDateString(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/** Value for an <input type="datetime-local"> showing a UTC ISO instant
+ * in local time: 'YYYY-MM-DDTHH:mm'. */
+export function toDateTimeLocalValue(iso: string): string {
+  const d = new Date(iso)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${localDateString(d)}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/** Inverse of toDateTimeLocalValue: a datetime-local value is parsed as
+ * local time and converted back to a UTC ISO string. Round-tripping
+ * display → edit → save never moves the recorded moment. */
+export function fromDateTimeLocalValue(v: string): string {
+  return new Date(v).toISOString()
+}
+
+export interface ComparisonAssessment {
+  exclusions: ComparisonExclusion[]
+  /** The stock's own price return can be measured later. */
+  comparisonStatus: 'evaluable' | 'not_evaluable'
+  /** The excess return vs the primary benchmark (SPY) can be measured:
+   * needs everything comparisonStatus needs, plus the benchmark's own
+   * decision-time price, date and source. */
+  benchmarkComparisonStatus: 'evaluable' | 'not_evaluable'
+  /** Cross-model/version comparison needs a known build commit. This is
+   * deliberately separate from the price statuses: an unknown build does
+   * not invalidate a price return (PR #7 review, BLOCKER 4). */
+  modelComparisonEligible: boolean
+}
+
 export function deriveComparisonExclusions(args: {
   price: PriceSnapshot
+  benchmark: BenchmarkPriceSnapshot
+  /** Local calendar date of the decision moment ('YYYY-MM-DD'). A price
+   * whose market date is later than this cannot be a decision-time
+   * observation, however it was obtained. */
+  decidedDateLocal: string
   retrospective: boolean
   versionUnknown: boolean
-}): ComparisonExclusion[] {
+}): ComparisonAssessment {
   const out: ComparisonExclusion[] = []
-  if (args.price.price == null) out.push('missing_price')
-  if (!args.price.priceDate) out.push('missing_price_date')
-  if (!args.price.source) out.push('missing_price_source')
+  const stockBlocking: ComparisonExclusion[] = []
+  const benchBlocking: ComparisonExclusion[] = []
+  const stock: [boolean, ComparisonExclusion][] = [
+    [args.price.price == null, 'missing_price'],
+    [!args.price.priceDate, 'missing_price_date'],
+    [!args.price.source, 'missing_price_source'],
+    [args.price.priceDate != null && args.price.priceDate > args.decidedDateLocal, 'price_after_decision'],
+  ]
+  const bench: [boolean, ComparisonExclusion][] = [
+    [args.benchmark.price == null, 'missing_benchmark_price'],
+    [!args.benchmark.priceDate, 'missing_benchmark_price_date'],
+    [!args.benchmark.source, 'missing_benchmark_price_source'],
+    [args.benchmark.priceDate != null && args.benchmark.priceDate > args.decidedDateLocal, 'benchmark_price_after_decision'],
+  ]
+  for (const [hit, code] of stock) if (hit) { out.push(code); stockBlocking.push(code) }
+  for (const [hit, code] of bench) if (hit) { out.push(code); benchBlocking.push(code) }
   if (args.versionUnknown) out.push('version_unknown')
   if (args.retrospective) out.push('retrospective')
-  return out
+  const comparisonStatus = stockBlocking.length === 0 && !args.retrospective
+    ? 'evaluable' : 'not_evaluable'
+  const benchmarkComparisonStatus = comparisonStatus === 'evaluable' && benchBlocking.length === 0
+    ? 'evaluable' : 'not_evaluable'
+  return {
+    exclusions: out,
+    comparisonStatus,
+    benchmarkComparisonStatus,
+    modelComparisonEligible: !args.versionUnknown,
+  }
+}
+
+/** Whether an evaluation price dated `priceDate` may be recorded as the
+ * return for `horizonMonths` after the decision. The pre-registered
+ * tolerance window is [horizon, horizon + 2) elapsed calendar months:
+ * earlier is not that horizon yet, later belongs to a longer horizon
+ * (PR #7 review, BLOCKER 3). */
+export function validateEvaluationHorizon(
+  decidedAt: string, priceDate: string, horizonMonths: number,
+): { ok: boolean; elapsedMonths: number } {
+  const start = localDateString(new Date(decidedAt))
+  const [y1, m1, d1] = start.split('-').map(Number)
+  const [y2, m2, d2] = priceDate.split('-').map(Number)
+  let months = (y2 - y1) * 12 + (m2 - m1)
+  if (d2 < d1) months -= 1
+  return { ok: months >= horizonMonths && months < horizonMonths + 2, elapsedMonths: months }
 }
 
 export interface BuildDraftInput {
@@ -150,8 +235,11 @@ export function buildDecisionLogDraft(input: BuildDraftInput): DecisionLogDraft 
 
   const retrospective = isRetrospective(input.decidedAt, input.createdAt, input.decidedAtExplicit ?? false)
   const versionUnknown = input.buildCommit == null
-  const exclusions = deriveComparisonExclusions({
-    price: input.priceAtDecision, retrospective, versionUnknown,
+  const assessment = deriveComparisonExclusions({
+    price: input.priceAtDecision,
+    benchmark: input.benchmarkPrice,
+    decidedDateLocal: localDateString(new Date(input.decidedAt)),
+    retrospective, versionUnknown,
   })
 
   const verdict = input.verdict
@@ -177,8 +265,10 @@ export function buildDecisionLogDraft(input: BuildDraftInput): DecisionLogDraft 
     priceAtDecision: input.priceAtDecision,
     benchmarkPrice: input.benchmarkPrice,
     extraBenchmarks: input.extraBenchmarks,
-    comparisonStatus: exclusions.length === 0 ? 'evaluable' : 'not_evaluable',
-    comparisonExclusions: exclusions,
+    comparisonStatus: assessment.comparisonStatus,
+    benchmarkComparisonStatus: assessment.benchmarkComparisonStatus,
+    modelComparisonEligible: assessment.modelComparisonEligible,
+    comparisonExclusions: assessment.exclusions,
 
     verdictReportId: verdict?.id ?? null,
     verdictResult: verdict?.verdict ?? null,
@@ -264,10 +354,15 @@ export function computeEvaluationReturns(args: {
   let excessReturnPct: number | null = null
   let note: string | null = null
   if (stockReturnPct != null && benchmarkReturnPct != null) {
-    if (args.decisionPrice.currency === args.decisionBenchmark.currency) {
-      excessReturnPct = stockReturnPct - benchmarkReturnPct
-    } else {
+    if (args.decisionPrice.currency !== args.decisionBenchmark.currency) {
       note = 'excess return not computed: stock and benchmark currencies differ'
+    } else if (!conditionsMatch(args.decisionPrice, args.decisionBenchmark)) {
+      // Each leg is internally consistent, but an adjusted (total-return
+      // style) stock figure and a raw SPY figure are different quantities;
+      // their difference is not an excess return (PR #7 review, BLOCKER 3).
+      note = 'excess return not computed: stock and benchmark price conditions (type/adjustment) differ'
+    } else {
+      excessReturnPct = stockReturnPct - benchmarkReturnPct
     }
   } else if (stockReturnPct == null) {
     note = 'stock return not computed: missing price or price conditions (type/adjustment/currency) differ from decision time'

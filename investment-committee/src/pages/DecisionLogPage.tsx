@@ -4,7 +4,10 @@ import { useStore } from '../state/store'
 import { t } from '../lib/i18n'
 import { decisionLogRepository } from '../db/repositories'
 import { verifyLogBody } from '../lib/decisionLogHash'
-import { computeEvaluationReturns, emptyBenchmarkSnapshot, emptyPriceSnapshot } from '../lib/decisionLog'
+import {
+  computeEvaluationReturns, emptyBenchmarkSnapshot, emptyPriceSnapshot,
+  localDateString, validateEvaluationHorizon,
+} from '../lib/decisionLog'
 import { decisionLogsToCsv } from '../lib/decisionLogCsv'
 import type {
   DecisionLogEvaluation, DecisionLogEvent, DecisionLogRecord, PriceType,
@@ -44,6 +47,16 @@ export default function DecisionLogPage() {
   // reason recorded) instead of a silently mixed-basis number.
   const [evalPriceType, setEvalPriceType] = useState<PriceType>('raw')
   const [evalAdjustmentBasis, setEvalAdjustmentBasis] = useState('')
+  // The benchmark's evaluation conditions are independent of the stock's:
+  // SPY may come from a different series with its own adjustment basis.
+  const [benchEvalPriceType, setBenchEvalPriceType] = useState<PriceType>('raw')
+  const [benchEvalAdjustmentBasis, setBenchEvalAdjustmentBasis] = useState('')
+  // The evaluation price's actual market date, and whether the "price" is
+  // delisting/acquisition consideration rather than a market quote.
+  const [evalPriceDate, setEvalPriceDate] = useState('')
+  const [evalDelisted, setEvalDelisted] = useState(false)
+  const [evalHashOk, setEvalHashOk] = useState<Map<string, boolean>>(new Map())
+  const [eventHashOk, setEventHashOk] = useState<Map<string, boolean>>(new Map())
   const [evalBenchPrice, setEvalBenchPrice] = useState('')
 
   useEffect(() => {
@@ -54,10 +67,13 @@ export default function DecisionLogPage() {
     ]).then(async ([all, evals]) => {
       const checks = new Map<string, boolean>()
       for (const l of all) checks.set(l.id, await verifyLogBody(l))
+      const evalChecks = new Map<string, boolean>()
+      for (const e of evals) evalChecks.set(e.id, await verifyLogBody(e))
       if (cancelled) return
       setLogs(all)
       setEvaluations(evals)
       setHashOk(checks)
+      setEvalHashOk(evalChecks)
     })
     return () => { cancelled = true }
   }, [])
@@ -67,8 +83,13 @@ export default function DecisionLogPage() {
   useEffect(() => {
     if (!selectedId) return
     let cancelled = false
-    decisionLogRepository.listEvents(selectedId).then(items => {
-      if (!cancelled) setEventsState({ logId: selectedId, items })
+    decisionLogRepository.listEvents(selectedId).then(async items => {
+      const checks = new Map<string, boolean>()
+      for (const ev of items) checks.set(ev.id, await verifyLogBody(ev))
+      if (!cancelled) {
+        setEventsState({ logId: selectedId, items })
+        setEventHashOk(checks)
+      }
     })
     return () => { cancelled = true }
   }, [selectedId])
@@ -105,18 +126,39 @@ export default function DecisionLogPage() {
     setEventsState(prev => prev.logId === selected.id
       ? { logId: prev.logId, items: [...prev.items, ev] }
       : { logId: selected.id, items: [ev] })
+    setEventHashOk(prev => new Map(prev).set(ev.id, true))
     setNoteText('')
     showToast(t('decisionLogSaved', lang), 'success')
   }
 
   async function handleAddEvaluation() {
     if (!selected) return
+    // Validation (PR #7 review, BLOCKER 3): the price must be a finite
+    // positive number with a real market date, and the elapsed period
+    // must match the chosen horizon — otherwise the entry would pose as
+    // a period return it is not.
+    const badNumber = (s: string, required: boolean) =>
+      s.trim() === '' ? required : (!Number.isFinite(Number(s)) || Number(s) <= 0)
+    if (badNumber(evalPrice, true) || badNumber(evalBenchPrice, false) || !evalPriceDate) {
+      showToast(t('decisionLogInvalidPrice', lang), 'error')
+      return
+    }
+    if (evalPriceDate > localDateString(new Date())) {
+      showToast(t('decisionLogFutureDate', lang), 'error')
+      return
+    }
+    const hv = validateEvaluationHorizon(selected.decidedAt, evalPriceDate, Number(horizon))
+    if (!hv.ok) {
+      showToast(t('decisionLogHorizonMismatch', lang), 'error')
+      return
+    }
     const nowIso = new Date().toISOString()
     const evalBasis = evalPriceType === 'adjusted' ? (evalAdjustmentBasis.trim() || null) : null
+    const benchBasis = benchEvalPriceType === 'adjusted' ? (benchEvalAdjustmentBasis.trim() || null) : null
     const priceNow = {
       ...emptyPriceSnapshot(nowIso),
-      price: evalPrice.trim() === '' ? null : Number(evalPrice),
-      priceDate: nowIso.slice(0, 10),
+      price: Number(evalPrice),
+      priceDate: evalPriceDate,
       currency: selected.priceAtDecision.currency,
       priceType: evalPriceType,
       adjustmentBasis: evalBasis,
@@ -125,16 +167,18 @@ export default function DecisionLogPage() {
     const benchNow = evalBenchPrice.trim() === '' ? null : {
       ...emptyBenchmarkSnapshot(nowIso),
       price: Number(evalBenchPrice),
-      priceDate: nowIso.slice(0, 10),
+      priceDate: evalPriceDate,
       currency: selected.benchmarkPrice.currency,
-      priceType: evalPriceType,
-      adjustmentBasis: evalBasis,
+      priceType: benchEvalPriceType,
+      adjustmentBasis: benchBasis,
       source: 'manual',
     }
     const r = computeEvaluationReturns({
       decisionPrice: selected.priceAtDecision, priceNow,
       decisionBenchmark: selected.benchmarkPrice, benchmarkNow: benchNow,
     })
+    const note = [evalDelisted ? 'delisting_consideration' : null, r.note]
+      .filter(Boolean).join(' · ') || null
     const ev = await decisionLogRepository.addEvaluation({
       logId: selected.id,
       horizonMonths: Number(horizon),
@@ -143,9 +187,10 @@ export default function DecisionLogPage() {
       stockReturnPct: r.stockReturnPct,
       benchmarkReturnPct: r.benchmarkReturnPct,
       excessReturnPct: r.excessReturnPct,
-      note: r.note,
+      note,
     })
     setEvaluations(prev => [...prev, ev])
+    setEvalHashOk(prev => new Map(prev).set(ev.id, true))
     setEvalPrice('')
     setEvalBenchPrice('')
     showToast(t('decisionLogSaved', lang), 'success')
@@ -164,11 +209,19 @@ export default function DecisionLogPage() {
         }
       >
         {logs.length > 0 && (
-          <div style={{
-            fontSize: 11, marginBottom: 12,
-            color: logs.every(l => hashOk.get(l.id)) ? T.green : T.red,
-          }}>
-            integrity: {logs.filter(l => hashOk.get(l.id)).length}/{logs.length} records verified
+          <div style={{ fontSize: 11, marginBottom: 12 }}>
+            <span style={{
+              color: logs.every(l => hashOk.get(l.id)) && evaluations.every(e => evalHashOk.get(e.id))
+                ? T.green : T.red,
+            }}>
+              integrity: {logs.filter(l => hashOk.get(l.id)).length}/{logs.length} records ·{' '}
+              {evaluations.filter(e => evalHashOk.get(e.id)).length}/{evaluations.length} evaluations verified
+              {selected && events.length > 0 &&
+                ` · ${events.filter(ev => eventHashOk.get(ev.id)).length}/${events.length} events (selected)`}
+            </span>
+            <div style={{ color: T.textDim, marginTop: 2 }}>
+              {t('decisionLogIntegrityNote', lang)}
+            </div>
           </div>
         )}
 
@@ -184,6 +237,10 @@ export default function DecisionLogPage() {
                 if (next) {
                   setEvalPriceType(l.priceAtDecision.priceType)
                   setEvalAdjustmentBasis(l.priceAtDecision.adjustmentBasis ?? '')
+                  setBenchEvalPriceType(l.benchmarkPrice.priceType)
+                  setBenchEvalAdjustmentBasis(l.benchmarkPrice.adjustmentBasis ?? '')
+                  setEvalPriceDate(localDateString(new Date()))
+                  setEvalDelisted(false)
                 }
               }}
               style={{
@@ -225,6 +282,8 @@ export default function DecisionLogPage() {
                   {events.map(ev => (
                     <div key={ev.id} style={{ padding: '2px 0' }}>
                       {ev.at.slice(0, 16)} · {ev.type}{ev.note ? ` — ${ev.note}` : ''}
+                      {eventHashOk.get(ev.id) === false &&
+                        <span style={{ color: T.red }}> ⚠ hash mismatch</span>}
                     </div>
                   ))}
                   <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 8 }}>
@@ -248,6 +307,8 @@ export default function DecisionLogPage() {
                       SPY {ev.benchmarkReturnPct?.toFixed(1) ?? '—'}% ·
                       excess {ev.excessReturnPct?.toFixed(1) ?? '—'}%
                       {ev.note ? ` (${ev.note})` : ''}
+                      {evalHashOk.get(ev.id) === false &&
+                        <span style={{ color: T.red }}> ⚠ hash mismatch</span>}
                     </div>
                   ))}
                   <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 8, flexWrap: 'wrap' }}>
@@ -268,6 +329,24 @@ export default function DecisionLogPage() {
                         placeholder="split_dividend_adjusted"
                         onChange={setEvalAdjustmentBasis} />
                     )}
+                    <Select label={`SPY ${t('decisionLogPriceType', lang)}`} value={benchEvalPriceType}
+                      onChange={v => setBenchEvalPriceType(v as PriceType)}
+                      options={[
+                        { value: 'raw', label: 'raw' },
+                        { value: 'adjusted', label: 'adjusted' },
+                      ]} />
+                    {benchEvalPriceType === 'adjusted' && (
+                      <Input label="SPY adjustmentBasis" value={benchEvalAdjustmentBasis}
+                        placeholder="split_dividend_adjusted"
+                        onChange={setBenchEvalAdjustmentBasis} />
+                    )}
+                    <Input label={t('decisionLogPriceDate', lang)} type="date" value={evalPriceDate}
+                      onChange={setEvalPriceDate} />
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11, color: T.textDim }}>
+                      <input type="checkbox" checked={evalDelisted}
+                        onChange={e => setEvalDelisted(e.target.checked)} />
+                      {t('decisionLogDelisted', lang)}
+                    </label>
                     <Button size="sm" accent={T.cyan} onClick={handleAddEvaluation}>
                       {t('decisionLogAddEvaluation', lang)}
                     </Button>

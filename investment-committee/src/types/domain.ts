@@ -491,6 +491,11 @@ export type ComparisonExclusion =
   | 'missing_price'
   | 'missing_price_date'
   | 'missing_price_source'
+  | 'price_after_decision'
+  | 'missing_benchmark_price'
+  | 'missing_benchmark_price_date'
+  | 'missing_benchmark_price_source'
+  | 'benchmark_price_after_decision'
   | 'version_unknown'
   | 'retrospective'
 
@@ -526,7 +531,14 @@ export interface DecisionLogRecord {
   extraBenchmarks: BenchmarkPriceSnapshot[]
 
   // Comparability of this record for later performance measurement.
+  // comparisonStatus covers the stock's own price return; the SPY excess
+  // comparison has its own status because it additionally needs the
+  // benchmark's decision-time price. version_unknown does NOT block
+  // either price status — it only limits model/version comparison,
+  // recorded separately as modelComparisonEligible (PR #7 review).
   comparisonStatus: 'evaluable' | 'not_evaluable'
+  benchmarkComparisonStatus: 'evaluable' | 'not_evaluable'
+  modelComparisonEligible: boolean
   comparisonExclusions: ComparisonExclusion[]
 
   // Committee judgment (frozen copies + references)

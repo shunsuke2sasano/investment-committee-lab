@@ -20,7 +20,7 @@ export function decisionLogsToCsv(
     'decidedAt', 'ticker', 'companyName', 'humanFinalDecision', 'verdictResult',
     'priceAtDecision', 'priceCurrency', 'priceType', 'expectedCagr', 'cagrGate',
     'riskLevel', 'totalScore', 'vetoCount', 'engineRank', 'retrospective',
-    'comparisonStatus', 'contentHash',
+    'comparisonStatus', 'benchmarkComparisonStatus', 'modelComparisonEligible', 'contentHash',
     ...HORIZONS.flatMap(h => [`ret${h}m_stockPct`, `ret${h}m_benchmarkPct`, `ret${h}m_excessPct`]),
   ]
   const byLog = new Map<string, DecisionLogEvaluation[]>()
@@ -39,7 +39,8 @@ export function decisionLogsToCsv(
       l.decidedAt, l.ticker, l.companyName, l.humanFinalDecision, l.verdictResult,
       l.priceAtDecision.price, l.priceAtDecision.currency, l.priceAtDecision.priceType,
       l.expectedCagr, l.cagrGate, l.riskLevel, l.totalScore, l.vetoCount,
-      l.engineRank, l.retrospective, l.comparisonStatus, l.contentHash,
+      l.engineRank, l.retrospective, l.comparisonStatus, l.benchmarkComparisonStatus,
+      l.modelComparisonEligible, l.contentHash,
     ]
     const evalCells = HORIZONS.flatMap(h => {
       const e = latestAtHorizon(l.id, h)
