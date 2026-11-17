@@ -361,6 +361,9 @@ export default function VerdictPage() {
             <div style={{ color: T.textDim, fontSize: 11, marginTop: 4 }}>
               Valuationページで期待CAGRが{cagrGateMin}%を下回っています。BUYは自動的にWATCHにダウングレードされます。
             </div>
+            <div style={{ color: T.textDim, fontSize: 11, marginTop: 4 }}>
+              ブロックは「買うな」ではなく、成長率や倍率の想定が厳しすぎないか確認する合図です。想定に自信がある場合は、Valuationの前提を見直してから再判定してください。
+            </div>
           </div>
         )}
 
