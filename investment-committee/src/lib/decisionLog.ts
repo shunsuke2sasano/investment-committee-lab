@@ -29,10 +29,39 @@ export function emptyBenchmarkSnapshot(recordedAt: string): BenchmarkPriceSnapsh
   return { ...emptyPriceSnapshot(recordedAt), label: 'S&P 500 (SPY)', ticker: 'SPY' }
 }
 
-/** A decision entered for a past date is retrospective. Compared by ISO
- * date so a same-day evening entry is not flagged. */
-export function isRetrospective(decidedAt: string, createdAt: string): boolean {
+/** Whether a record is retrospective (a past decision written down later).
+ * Two regimes (Issue #6, final review):
+ * - The user explicitly specified the decision moment (`explicit`): any
+ *   moment more than a minute before creation counts, even on the same
+ *   day — deliberately backdating within the day is still backdating.
+ *   A sub-minute difference is UI/clock jitter, not a past decision.
+ * - The moment is bound by the flow (a verdict's own timestamp, or "now"
+ *   by default): compared by ISO date, so a same-day entry is a forward
+ *   record and only an earlier day is retrospective. */
+export function isRetrospective(decidedAt: string, createdAt: string, explicit = false): boolean {
+  if (explicit) {
+    return new Date(decidedAt).getTime() < new Date(createdAt).getTime() - 60_000
+  }
   return decidedAt.slice(0, 10) < createdAt.slice(0, 10)
+}
+
+/** The CAGR-gate minimum that may be frozen into a log as the value in
+ * force at decision time (Issue #6, mandatory fix B + final review).
+ * Settings cannot be reconstructed for a past moment, so:
+ * - verdict flow: only a value captured at the moment the verdict was
+ *   saved (`frozenAtSave`) counts. Being recorded on the same day is NOT
+ *   sufficient — settings can change within a day. No frozen value → null.
+ * - manual flow: the decision is made in the panel itself, so the current
+ *   value is the decision-time value — unless the entry is retrospective,
+ *   in which case it is unknown → null. */
+export function resolveCagrGateMinUsed(args: {
+  entrySource: DecisionEntrySource
+  frozenAtSave: number | null
+  currentValue: number | null
+  retrospective: boolean
+}): number | null {
+  if (args.entrySource === 'verdict_save') return args.frozenAtSave
+  return args.retrospective ? null : args.currentValue
 }
 
 interface SectionPick<T> {
@@ -79,6 +108,9 @@ export interface BuildDraftInput {
   company: CompanyCase
   entrySource: DecisionEntrySource
   decidedAt: string
+  /** True when the user explicitly picked the decision moment in the UI
+   * (as opposed to it being bound to the verdict / defaulted to now). */
+  decidedAtExplicit?: boolean
   createdAt: string
   /** The moment the decision crystallised: the verdict's createdAt for the
    * verdict flow, decidedAt for manual entries. Sources must predate it. */
@@ -116,16 +148,7 @@ export function buildDecisionLogDraft(input: BuildDraftInput): DecisionLogDraft 
   const thesis = thesisPick.verified
   const review = reviewPick.verified
 
-  const retrospective = isRetrospective(input.decidedAt, input.createdAt)
-  // Settings cannot be reconstructed for a past moment. The current
-  // cagrGateMin is frozen as the decision-time value only when the log is
-  // created contemporaneously with the decision (verdict flow: the same
-  // day the verdict was saved; manual flow: not retrospective). In every
-  // other case it stays unknown rather than pretending today's setting
-  // was the threshold in force back then (Issue #6, mandatory fix B).
-  const settingsFixable = input.verdict
-    ? input.verdict.createdAt.slice(0, 10) === input.createdAt.slice(0, 10)
-    : !retrospective
+  const retrospective = isRetrospective(input.decidedAt, input.createdAt, input.decidedAtExplicit ?? false)
   const versionUnknown = input.buildCommit == null
   const exclusions = deriveComparisonExclusions({
     price: input.priceAtDecision, retrospective, versionUnknown,
@@ -180,7 +203,9 @@ export function buildDecisionLogDraft(input: BuildDraftInput): DecisionLogDraft 
     expectedCagr: val?.expectedCagr ?? null,
     cagrGate: val?.cagrGate ?? null,
     impliedGrowthPct: val?.impliedGrowthPct ?? null,
-    cagrGateMinUsed: settingsFixable ? input.cagrGateMin : null,
+    // Pre-resolved by the caller via resolveCagrGateMinUsed: the value in
+    // force at decision time, or null when that cannot be established.
+    cagrGateMinUsed: input.cagrGateMin,
 
     thesisSnapshot: thesis
       ? { thesisText: thesis.thesisText, collapseConditions: thesis.collapseConditions }

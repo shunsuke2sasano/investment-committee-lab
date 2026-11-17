@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildDecisionLogDraft, computeEvaluationReturns, emptyBenchmarkSnapshot,
-  emptyPriceSnapshot, isRetrospective, pickSectionAsOf,
+  emptyPriceSnapshot, isRetrospective, pickSectionAsOf, resolveCagrGateMinUsed,
 } from './decisionLog'
 import type {
   CompanyCase, DataAnalysis, ThesisAnalysis, ValuationReport, VerdictReport,
@@ -152,9 +152,9 @@ describe('buildDecisionLogDraft', () => {
     expect(d.thesisSnapshot).toBeNull()
   })
 
-  it('does not freeze today\'s cagrGateMin into a log recorded on a later day (mandatory fix B)', () => {
-    const d = draftBase({ createdAt: '2026-06-05T12:00:00.000Z' })
-    expect(d.cagrGateMinUsed).toBeNull()
+  it('stores the pre-resolved cagrGateMin as given (resolution happens upstream)', () => {
+    expect(draftBase().cagrGateMinUsed).toBe(12)
+    expect(draftBase({ cagrGateMin: null }).cagrGateMinUsed).toBeNull()
   })
 
   it('backdated manual entries cannot attach newer financials (P0-1)', () => {
@@ -183,9 +183,37 @@ describe('buildDecisionLogDraft', () => {
 })
 
 describe('isRetrospective', () => {
-  it('compares by date', () => {
+  it('compares by date when the moment is bound by the flow', () => {
     expect(isRetrospective('2026-01-01T09:00:00.000Z', '2026-01-01T23:00:00.000Z')).toBe(false)
     expect(isRetrospective('2026-01-01T09:00:00.000Z', '2026-01-02T00:00:00.000Z')).toBe(true)
+  })
+  it('flags an explicitly specified past moment even on the same day', () => {
+    expect(isRetrospective('2026-01-01T09:00:00.000Z', '2026-01-01T12:00:00.000Z', true)).toBe(true)
+  })
+  it('does not flag sub-minute differences (no false positive for deciding now)', () => {
+    expect(isRetrospective('2026-01-01T12:00:00.000Z', '2026-01-01T12:00:30.000Z', true)).toBe(false)
+    expect(isRetrospective('2026-01-01T12:00:00.000Z', '2026-01-01T12:00:00.500Z', true)).toBe(false)
+  })
+})
+
+describe('resolveCagrGateMinUsed (mandatory fix B, final review)', () => {
+  it('verdict flow: only a value frozen at verdict-save time counts', () => {
+    expect(resolveCagrGateMinUsed({
+      entrySource: 'verdict_save', frozenAtSave: 12, currentValue: 12, retrospective: false,
+    })).toBe(12)
+    // Recorded later the same day, but nothing was frozen at save time:
+    // today's setting must not be presented as the decision-time value.
+    expect(resolveCagrGateMinUsed({
+      entrySource: 'verdict_save', frozenAtSave: null, currentValue: 12, retrospective: false,
+    })).toBeNull()
+  })
+  it('manual flow: current value counts only for a decision made now', () => {
+    expect(resolveCagrGateMinUsed({
+      entrySource: 'manual', frozenAtSave: null, currentValue: 12, retrospective: false,
+    })).toBe(12)
+    expect(resolveCagrGateMinUsed({
+      entrySource: 'manual', frozenAtSave: null, currentValue: 12, retrospective: true,
+    })).toBeNull()
   })
 })
 

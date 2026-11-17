@@ -38,6 +38,12 @@ export default function DecisionLogPage() {
   // Evaluation form
   const [horizon, setHorizon] = useState('12')
   const [evalPrice, setEvalPrice] = useState('')
+  // The evaluation price's own conditions, entered explicitly: defaulting
+  // them from the decision record is a starting point, not an assumption.
+  // If they differ from decision time, returns come out null (with the
+  // reason recorded) instead of a silently mixed-basis number.
+  const [evalPriceType, setEvalPriceType] = useState<PriceType>('raw')
+  const [evalAdjustmentBasis, setEvalAdjustmentBasis] = useState('')
   const [evalBenchPrice, setEvalBenchPrice] = useState('')
 
   useEffect(() => {
@@ -106,13 +112,14 @@ export default function DecisionLogPage() {
   async function handleAddEvaluation() {
     if (!selected) return
     const nowIso = new Date().toISOString()
+    const evalBasis = evalPriceType === 'adjusted' ? (evalAdjustmentBasis.trim() || null) : null
     const priceNow = {
       ...emptyPriceSnapshot(nowIso),
       price: evalPrice.trim() === '' ? null : Number(evalPrice),
       priceDate: nowIso.slice(0, 10),
       currency: selected.priceAtDecision.currency,
-      priceType: selected.priceAtDecision.priceType as PriceType,
-      adjustmentBasis: selected.priceAtDecision.adjustmentBasis,
+      priceType: evalPriceType,
+      adjustmentBasis: evalBasis,
       source: 'manual',
     }
     const benchNow = evalBenchPrice.trim() === '' ? null : {
@@ -120,8 +127,8 @@ export default function DecisionLogPage() {
       price: Number(evalBenchPrice),
       priceDate: nowIso.slice(0, 10),
       currency: selected.benchmarkPrice.currency,
-      priceType: selected.benchmarkPrice.priceType as PriceType,
-      adjustmentBasis: selected.benchmarkPrice.adjustmentBasis,
+      priceType: evalPriceType,
+      adjustmentBasis: evalBasis,
       source: 'manual',
     }
     const r = computeEvaluationReturns({
@@ -171,7 +178,14 @@ export default function DecisionLogPage() {
           logs.map(l => (
             <div
               key={l.id}
-              onClick={() => setSelectedId(l.id === selectedId ? null : l.id)}
+              onClick={() => {
+                const next = l.id === selectedId ? null : l.id
+                setSelectedId(next)
+                if (next) {
+                  setEvalPriceType(l.priceAtDecision.priceType)
+                  setEvalAdjustmentBasis(l.priceAtDecision.adjustmentBasis ?? '')
+                }
+              }}
               style={{
                 border: `1px solid ${l.id === selectedId ? T.cyan : T.borderDim}`,
                 padding: '10px 14px', marginBottom: 8, cursor: 'pointer', background: '#080D12',
@@ -243,6 +257,17 @@ export default function DecisionLogPage() {
                       onChange={setEvalPrice} />
                     <Input label={t('decisionLogBenchmarkPrice', lang)} type="number" value={evalBenchPrice}
                       onChange={setEvalBenchPrice} />
+                    <Select label={t('decisionLogPriceType', lang)} value={evalPriceType}
+                      onChange={v => setEvalPriceType(v as PriceType)}
+                      options={[
+                        { value: 'raw', label: 'raw' },
+                        { value: 'adjusted', label: 'adjusted' },
+                      ]} />
+                    {evalPriceType === 'adjusted' && (
+                      <Input label="adjustmentBasis" value={evalAdjustmentBasis}
+                        placeholder="split_dividend_adjusted"
+                        onChange={setEvalAdjustmentBasis} />
+                    )}
                     <Button size="sm" accent={T.cyan} onClick={handleAddEvaluation}>
                       {t('decisionLogAddEvaluation', lang)}
                     </Button>
