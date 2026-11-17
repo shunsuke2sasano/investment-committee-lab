@@ -94,6 +94,9 @@ export interface DataLaneInput {
   shareDilutionAnnual: number | null    // % annual
   reinvestmentRate: number | null       // %
   currentRatio: number | null
+  /** (Goodwill + intangible assets) / total assets, %. Optional: feeds the
+   *  financial risk screen (acquisition dependence), not the quality scores. */
+  goodwillIntangiblesToAssets?: number | null
 }
 
 // ── Multi-period data (Phase 4-B2) ────────────────────────────────────────
@@ -109,6 +112,47 @@ export interface DataLaneScores {
   cashGeneration: 1 | 2 | 3 | 4 | 5
 }
 
+// ── Data coverage & financial risk screen (Phase 2) ─────────────────────
+/** Three-way classification of every metric a score reads. 'notApplicable'
+ *  is decided ONLY by the industry preset (with a reason code) — never by
+ *  the data merely being unavailable; an unavailable applicable metric is
+ *  'missing'. */
+export type MetricCoverageStatus = 'present' | 'missing' | 'notApplicable'
+
+/** How much of the data each score is actually built on. Ratios are
+ *  present / applicable: not-applicable metrics are excluded from the
+ *  denominator, so `totalMetrics` counts applicable metrics only.
+ *  `perScoreApplicable`, `statuses` and `naReasons` are absent on records
+ *  saved before the three-way split (legacy coverage). */
+export interface DataCoverage {
+  perScore: Record<keyof DataLaneScores, number>
+  overall: number
+  usedMetrics: number
+  totalMetrics: number
+  perScoreApplicable?: Record<keyof DataLaneScores, number>
+  statuses?: Partial<Record<keyof DataLaneInput, MetricCoverageStatus>>
+  naReasons?: Partial<Record<keyof DataLaneInput, string>>
+}
+
+export type RiskSeverity = 'caution' | 'severe'
+
+/** Explicit three-level risk state, plus 'unevaluable' when too little
+ *  data exists to run the screen at all. 'unevaluable' must never be
+ *  presented as 'normal'. Stored on the analysis; absent on legacy
+ *  records, where it is derived from the saved flags/inputs. */
+export type RiskLevel = 'normal' | 'caution' | 'severe' | 'unevaluable'
+
+/** A rule-based red flag from the financial risk screen. Kept separate from
+ *  the quality scores; `vetoAxis` names the verdict axis this flag is a
+ *  veto candidate for in the IC-07 veto flow. */
+export interface RiskFlag {
+  id: string
+  severity: RiskSeverity
+  label: string
+  detail: string
+  vetoAxis?: keyof VerdictAxes
+}
+
 export interface DataAnalysis {
   id: string
   companyId: string
@@ -118,6 +162,9 @@ export interface DataAnalysis {
   computedAt: string
   periods?: FiscalPeriodData[]  // multi-period data; undefined = legacy single-period
   presetId?: string
+  coverage?: DataCoverage       // undefined = legacy record saved before Phase 2
+  riskFlags?: RiskFlag[]        // undefined = legacy record saved before Phase 2
+  riskLevel?: RiskLevel         // undefined = legacy record; derive via evaluateFinancialRisk
 }
 
 // ── Market Lane ──────────────────────────────────────────────────────────
@@ -229,7 +276,8 @@ export interface ValuationReport {
     bull: ValuationScenario
   }
   expectedCagr: number | null          // base case
-  cagrGate: 'pass' | 'watch' | 'block' // >= max(20, gateMin) / gateMin-20 / < gateMin (gateMin = settings.cagrGateMin, default 12)
+  cagrGate: 'pass' | 'watch' | 'block' | 'unknown' // >= max(20, gateMin) / gateMin-20 / < gateMin / uncalculable (gateMin = settings.cagrGateMin, default 12)
+  impliedGrowthPct?: number | null     // revenue growth the current EV prices in at Base margin/multiple (Phase 3)
   downsideRiskScore: number            // bear CAGR delta from base
   createdAt: string
 }
