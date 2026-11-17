@@ -12,6 +12,9 @@ import type {
   MetricSnapshot,
   AppSettings,
   PositionRecord,
+  DecisionLogRecord,
+  DecisionLogEvent,
+  DecisionLogEvaluation,
 } from '../types/domain'
 
 export class InvestmentCommitteeDB extends Dexie {
@@ -27,6 +30,9 @@ export class InvestmentCommitteeDB extends Dexie {
   metric_snapshots!: Table<MetricSnapshot>
   app_settings!: Table<AppSettings>
   position_records!: Table<PositionRecord>
+  decision_logs!: Table<DecisionLogRecord>
+  decision_log_events!: Table<DecisionLogEvent>
+  decision_log_evaluations!: Table<DecisionLogEvaluation>
 
   constructor() {
     super('InvestmentCommitteeDB')
@@ -116,6 +122,26 @@ export class InvestmentCommitteeDB extends Dexie {
       metric_snapshots:  'id, asOfDate',
       app_settings:      'id',
       position_records:  'id, companyId, status, createdAt',
+    })
+
+    // v6: add forward decision log tables (Phase A). New tables only —
+    // no existing table definition changes, no data migration.
+    this.version(6).stores({
+      companies:         'id, ticker, status, updatedAt',
+      thesis_analyses:   'id, companyId, version, updatedAt',
+      data_analyses:     'id, companyId, computedAt',
+      market_analyses:   'id, companyId, computedAt',
+      review_reports:    'id, companyId, createdAt',
+      valuation_reports: 'id, companyId, createdAt',
+      verdict_reports:   'id, companyId, createdAt',
+      monitoring_plans:  'id, companyId, updatedAt',
+      lesson_records:    'id, companyId, ticker, phase, createdAt',
+      metric_snapshots:  'id, asOfDate',
+      app_settings:      'id',
+      position_records:  'id, companyId, status, createdAt',
+      decision_logs:             'id, companyId, ticker, decidedAt, humanFinalDecision, &[verdictReportId+decidedAt]',
+      decision_log_events:       'id, logId, at',
+      decision_log_evaluations:  'id, logId, horizonMonths',
     })
   }
 }

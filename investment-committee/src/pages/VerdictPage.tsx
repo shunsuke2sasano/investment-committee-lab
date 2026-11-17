@@ -16,6 +16,7 @@ import { NOT_APPLICABLE_METRICS, type PresetId } from '../lib/industryPresets'
 import type { VerdictAxes, AxisScore, VerdictReport, DataAnalysis, MarketAnalysis, RiskFlag } from '../types/domain'
 import { VERDICT_PROFILES } from '../types/domain'
 import { generateVerdictDraft, applyDraftToAxes } from '../features/verdictEngine/service'
+import DecisionLogPanel from '../features/decisionLog/DecisionLogPanel'
 import { generateStyleReview, type StyleReviewResult } from '../features/styleReview/service'
 
 // ── Investment style ──────────────────────────────────────────────────────
@@ -139,6 +140,11 @@ export default function VerdictPage() {
   const [axes, setAxes] = useState<VerdictAxes>(emptyAxes())
   const [rationale, setRationale] = useState('')
   const [saved, setSaved] = useState<VerdictReport | null>(null)
+  const [showLogPanel, setShowLogPanel] = useState(false)
+  // The gate minimum in effect at the moment of an in-session verdict
+  // save, frozen for the decision log. A verdict loaded from storage has
+  // no such frozen value (past settings cannot be reconstructed).
+  const [gateMinAtSave, setGateMinAtSave] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [valuationCagr, setValuationCagr] = useState<number | null>(null)
@@ -160,6 +166,7 @@ export default function VerdictPage() {
       dataAnalysisRepository.getLatest(companyId),
       marketAnalysisRepository.getLatest(companyId),
     ]).then(([verdict, valuation, data, market]) => {
+      setGateMinAtSave(null)
       if (verdict) {
         setAxes(verdict.axisScores)
         setRationale(verdict.rationale)
@@ -342,6 +349,7 @@ export default function VerdictPage() {
         createdAt: new Date().toISOString(),
       })
       setSaved(v)
+      setGateMinAtSave(cagrGateMin)
       showToast(`Verdict: ${verdict}`, 'success')
     } catch { showToast(t('saveFailed', lang), 'error') }
     setLoading(false)
@@ -367,6 +375,9 @@ export default function VerdictPage() {
               {aiLoading ? t('verdictAiGenerating', lang) : t('verdictAiBtn', lang)}
             </Button>
             <Button onClick={handleSave} loading={loading} accent={T.pink}>{t('saveVerdict', lang)}</Button>
+            {saved && company && (
+              <Button onClick={() => setShowLogPanel(true)} accent={T.cyan}>{t('decisionLogRecord', lang)}</Button>
+            )}
           </div>
         }
       >
@@ -558,6 +569,16 @@ export default function VerdictPage() {
 
         {saved && <div style={{ color: T.textDim, fontSize: 10, marginTop: 8 }}>Last saved: {saved.createdAt.slice(0, 16)}</div>}
       </PageLayout>
+      {showLogPanel && company && (
+        <DecisionLogPanel
+          company={company}
+          verdict={saved}
+          frozenCagrGateMin={gateMinAtSave}
+          verdictSavedInSession={gateMinAtSave != null}
+          onClose={() => setShowLogPanel(false)}
+          onSaved={() => setShowLogPanel(false)}
+        />
+      )}
     </div>
   )
 }

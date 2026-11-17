@@ -445,6 +445,186 @@ export interface PositionRecord {
   updatedAt: string
 }
 
+// ── Forward Decision Log (Phase A) ───────────────────────────────────────
+// Append-only record of an investment decision, frozen with the information
+// available at decision time. See FORWARD_DECISION_LOG_SPEC.md.
+// The log is a record of *judgments*: real trades live in PositionRecord,
+// method validation lives in the (future) virtual portfolio ledger.
+
+export type DecisionKind = 'buy' | 'watch' | 'pass'
+export type DecisionEntrySource = 'verdict_save' | 'manual'
+export type CandidateSource = 'engine_ranking' | 'manual_watchlist' | 'ad_hoc'
+
+/** Price snapshot shared by the stock and its benchmarks. `priceDate` is the
+ * market date the price refers to; `recordedAt` is when it was written down.
+ * Returns are only computed when priceType/adjustmentBasis/currency match
+ * between decision time and evaluation time (Issue #6, P0-3). */
+export type PriceType = 'raw' | 'adjusted'
+export interface PriceSnapshot {
+  price: number | null
+  priceDate: string | null
+  recordedAt: string
+  currency: 'USD' | 'JPY'
+  priceType: PriceType
+  adjustmentBasis: string | null
+  source: string | null
+}
+
+export interface BenchmarkPriceSnapshot extends PriceSnapshot {
+  label: string
+  ticker: string
+}
+
+/** Whether a source section was verified to predate the decision.
+ * 'verified' sections carry a frozen content copy; 'unverified' sections
+ * carry only the reference (the source postdates the decision, so its
+ * content must not be presented as decision-time information); 'absent'
+ * means no source record existed at or before the decision time. */
+export type SectionAsOfStatus = 'verified' | 'unverified' | 'absent'
+export interface SourceRef {
+  id: string | null
+  sourceAt: string | null
+  asOfStatus: SectionAsOfStatus
+}
+
+export type ComparisonExclusion =
+  | 'missing_price'
+  | 'missing_price_date'
+  | 'missing_price_source'
+  | 'price_after_decision'
+  | 'missing_benchmark_price'
+  | 'missing_benchmark_price_date'
+  | 'missing_benchmark_price_source'
+  | 'benchmark_price_after_decision'
+  | 'version_unknown'
+  | 'retrospective'
+
+export interface DecisionLogRecord {
+  id: string
+  schemaVersion: 1
+  companyId: string
+  ticker: string
+  companyName: string
+  decidedAt: string
+  createdAt: string
+  entrySource: DecisionEntrySource
+  retrospective: boolean
+
+  // Model / code version. buildCommit null → versionUnknown, and the record
+  // is excluded from headline comparisons (no false precision).
+  appVersion: string
+  buildCommit: string | null
+  versionUnknown: boolean
+
+  // Candidate-population reservations (Issue #6, P0-2). Filled once a
+  // prediction engine exists; null in Phase A. A handful of manually
+  // recorded names is NOT a candidate population and proves nothing about
+  // the committee's added value.
+  decisionSessionId: string | null
+  candidateSource: CandidateSource | null
+  aiReviewUsed: boolean
+  engineVersionOrNone: string | null
+
+  // Decision-time prices (Issue #6, P0-3). Primary benchmark is SPY.
+  priceAtDecision: PriceSnapshot
+  benchmarkPrice: BenchmarkPriceSnapshot
+  extraBenchmarks: BenchmarkPriceSnapshot[]
+
+  // Comparability of this record for later performance measurement.
+  // comparisonStatus covers the stock's own price return; the SPY excess
+  // comparison has its own status because it additionally needs the
+  // benchmark's decision-time price. version_unknown does NOT block
+  // either price status — it only limits model/version comparison,
+  // recorded separately as modelComparisonEligible (PR #7 review).
+  comparisonStatus: 'evaluable' | 'not_evaluable'
+  benchmarkComparisonStatus: 'evaluable' | 'not_evaluable'
+  modelComparisonEligible: boolean
+  comparisonExclusions: ComparisonExclusion[]
+
+  // Committee judgment (frozen copies + references)
+  verdictReportId: string | null
+  verdictResult: 'BUY' | 'WATCH' | 'PASS' | null
+  humanFinalDecision: DecisionKind | null
+  previousLogId: string | null
+  axisScores: VerdictAxes | null
+  totalScore: number | null
+  vetoCount: number | null
+  profileUsed: VerdictProfile | null
+  rationale: string
+
+  // Data lane (frozen copies; only for 'verified' sections)
+  dataAnalysisId: string | null
+  scores: DataLaneScores | null
+  coverage: DataCoverage | null
+  riskLevel: RiskLevel | null
+  riskFlags: RiskFlag[] | null
+  dataInputSnapshot: DataLaneInput | null
+  periodsSnapshot: FiscalPeriodData[] | null
+
+  // Valuation (frozen copies; only for 'verified' sections)
+  valuationReportId: string | null
+  valuationAssumptions: ValuationAssumptions | null
+  expectedCagr: number | null
+  cagrGate: 'pass' | 'watch' | 'block' | 'unknown' | null
+  impliedGrowthPct: number | null
+  cagrGateMinUsed: number | null
+
+  // Thesis & AI review (frozen copies; only for 'verified' sections)
+  thesisSnapshot: { thesisText: string; collapseConditions: CollapseCondition[] } | null
+  reviewReportId: string | null
+  reviewModel: string | null
+  reviewSummary: { risks: ReviewRisk[]; mismatches: ReviewMismatch[] } | null
+
+  sourceRefs: {
+    dataAnalysis: SourceRef
+    valuation: SourceRef
+    thesis: SourceRef
+    review: SourceRef
+  }
+
+  // Reserved for the future ranking engine (never written after creation).
+  engineRank: number | null
+  engineScore: number | null
+  linkedPositionId: string | null
+
+  // Integrity: SHA-256 over the whole record except contentHash itself
+  // (id, decidedAt, createdAt included). Per-record hashes only — Phase A
+  // deliberately has no global hash chain (Issue #6, mandatory fix A).
+  // Tamper *detection* for one's own records — not third-party proof.
+  contentHash: string
+}
+
+export type DecisionLogEventType =
+  | 'created'
+  | 'note_added'
+  | 'correction_note'
+  | 'position_linked'
+  | 'position_unlinked'
+
+export interface DecisionLogEvent {
+  id: string
+  logId: string
+  type: DecisionLogEventType
+  at: string
+  note: string | null
+  payload: Record<string, unknown> | null
+  contentHash: string
+}
+
+export interface DecisionLogEvaluation {
+  id: string
+  logId: string
+  horizonMonths: number
+  evaluatedAt: string
+  priceNow: PriceSnapshot
+  benchmarkPriceNow: BenchmarkPriceSnapshot | null
+  stockReturnPct: number | null
+  benchmarkReturnPct: number | null
+  excessReturnPct: number | null
+  note: string | null
+  contentHash: string
+}
+
 // ── App Settings ─────────────────────────────────────────────────────────
 export interface AppSettings {
   id: 'default'
