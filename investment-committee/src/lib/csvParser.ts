@@ -154,6 +154,7 @@ const TEMPLATE_SAMPLE_VALUES: Record<keyof DataLaneInput, number> = {
   shareDilutionAnnual:  1.2,
   reinvestmentRate:    25.0,
   currentRatio:         2.0,
+  goodwillIntangiblesToAssets: 25.0,
 }
 
 export function generateTemplate(): string {
