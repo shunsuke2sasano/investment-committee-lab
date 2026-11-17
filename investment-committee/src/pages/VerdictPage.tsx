@@ -141,6 +141,10 @@ export default function VerdictPage() {
   const [rationale, setRationale] = useState('')
   const [saved, setSaved] = useState<VerdictReport | null>(null)
   const [showLogPanel, setShowLogPanel] = useState(false)
+  // The gate minimum in effect at the moment of an in-session verdict
+  // save, frozen for the decision log. A verdict loaded from storage has
+  // no such frozen value (past settings cannot be reconstructed).
+  const [gateMinAtSave, setGateMinAtSave] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [valuationCagr, setValuationCagr] = useState<number | null>(null)
@@ -162,6 +166,7 @@ export default function VerdictPage() {
       dataAnalysisRepository.getLatest(companyId),
       marketAnalysisRepository.getLatest(companyId),
     ]).then(([verdict, valuation, data, market]) => {
+      setGateMinAtSave(null)
       if (verdict) {
         setAxes(verdict.axisScores)
         setRationale(verdict.rationale)
@@ -344,6 +349,7 @@ export default function VerdictPage() {
         createdAt: new Date().toISOString(),
       })
       setSaved(v)
+      setGateMinAtSave(cagrGateMin)
       showToast(`Verdict: ${verdict}`, 'success')
     } catch { showToast(t('saveFailed', lang), 'error') }
     setLoading(false)
@@ -567,6 +573,7 @@ export default function VerdictPage() {
         <DecisionLogPanel
           company={company}
           verdict={saved}
+          frozenCagrGateMin={gateMinAtSave}
           onClose={() => setShowLogPanel(false)}
           onSaved={() => setShowLogPanel(false)}
         />

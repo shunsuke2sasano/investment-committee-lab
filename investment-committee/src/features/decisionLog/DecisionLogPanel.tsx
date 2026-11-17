@@ -5,6 +5,7 @@ import { t } from '../../lib/i18n'
 import { decisionLogRepository, settingsRepository } from '../../db/repositories'
 import {
   buildDecisionLogDraft, emptyBenchmarkSnapshot, emptyPriceSnapshot,
+  isRetrospective, resolveCagrGateMinUsed,
   type DecisionLogDraft,
 } from '../../lib/decisionLog'
 import { APP_VERSION, BUILD_COMMIT } from '../../lib/version'
@@ -31,6 +32,11 @@ interface Sources {
 interface Props {
   company: CompanyCase
   verdict: VerdictReport | null // null = manual entry
+  /** The cagrGateMin in effect at the moment the verdict was saved in
+   * this session, captured by VerdictPage. Null when the verdict was
+   * loaded from storage — past settings cannot be reconstructed, so the
+   * log then records the gate minimum as unknown. */
+  frozenCagrGateMin?: number | null
   onClose: () => void
   onSaved: (rec: DecisionLogRecord) => void
 }
@@ -43,13 +49,14 @@ function todayStr(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-export default function DecisionLogPanel({ company, verdict, onClose, onSaved }: Props) {
+export default function DecisionLogPanel({ company, verdict, frozenCagrGateMin, onClose, onSaved }: Props) {
   const lang = useStore(s => s.lang)
   const showToast = useStore(s => s.showToast)
   const [sources, setSources] = useState<Sources | null>(null)
   const [saving, setSaving] = useState(false)
 
   const [decidedAt, setDecidedAt] = useState<string>(verdict?.createdAt ?? new Date().toISOString())
+  const [decidedAtEdited, setDecidedAtEdited] = useState(false)
   const [decision, setDecision] = useState<DecisionKind>(verdict ? verdictToKind(verdict.verdict) : 'pass')
   const [rationale, setRationale] = useState<string>(verdict?.rationale ?? '')
 
@@ -97,10 +104,12 @@ export default function DecisionLogPanel({ company, verdict, onClose, onSaved }:
       adjustmentBasis: priceType === 'adjusted' ? (adjustmentBasis.trim() || null) : null,
       source: priceSource.trim() || null,
     }
+    const retro = isRetrospective(decidedAt, nowIso, decidedAtEdited)
     return buildDecisionLogDraft({
       company,
       entrySource: verdict ? 'verdict_save' : 'manual',
       decidedAt,
+      decidedAtExplicit: decidedAtEdited,
       createdAt: nowIso,
       referenceTime: verdict?.createdAt ?? decidedAt,
       verdict,
@@ -108,7 +117,12 @@ export default function DecisionLogPanel({ company, verdict, onClose, onSaved }:
       valuations: sources.valuations,
       theses: sources.theses,
       reviews: sources.reviews,
-      cagrGateMin: sources.cagrGateMin,
+      cagrGateMin: resolveCagrGateMinUsed({
+        entrySource: verdict ? 'verdict_save' : 'manual',
+        frozenAtSave: frozenCagrGateMin ?? null,
+        currentValue: sources.cagrGateMin,
+        retrospective: retro,
+      }),
       appVersion: APP_VERSION,
       buildCommit: BUILD_COMMIT,
       priceAtDecision: stockSnap,
@@ -118,7 +132,7 @@ export default function DecisionLogPanel({ company, verdict, onClose, onSaved }:
       rationale,
       candidateSource: verdict ? null : 'ad_hoc',
     })
-  }, [sources, company, verdict, decidedAt, decision, rationale, price, priceDate,
+  }, [sources, company, verdict, decidedAt, decidedAtEdited, frozenCagrGateMin, decision, rationale, price, priceDate,
       currency, priceType, adjustmentBasis, priceSource, benchPrice, benchPriceDate])
 
   async function handleSave() {
@@ -163,7 +177,7 @@ export default function DecisionLogPanel({ company, verdict, onClose, onSaved }:
               <Input
                 label={t('decisionLogDecidedAt', lang)} type="datetime-local"
                 value={decidedAt.slice(0, 16)}
-                onChange={v => setDecidedAt(new Date(v).toISOString())}
+                onChange={v => { setDecidedAt(new Date(v).toISOString()); setDecidedAtEdited(true) }}
               />
               <Select
                 label={t('decisionLogFinalDecision', lang)} value={decision}
