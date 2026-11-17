@@ -5,11 +5,11 @@ import {
 import { VERDICT_PROFILES } from '../types/domain'
 import type { VerdictAxes, AxisScore, ValuationAssumptions } from '../types/domain'
 
-const axis = (score: number, veto = false): AxisScore => ({
+const axis = (score: AxisScore['score'], veto = false): AxisScore => ({
   score, veto, comment: '', evidenceMetrics: [],
 })
 
-function allAxes(score: number): VerdictAxes {
+function allAxes(score: AxisScore['score']): VerdictAxes {
   return {
     businessQuality: axis(score), growthQuality: axis(score),
     capitalEfficiency: axis(score), balanceSheetSafety: axis(score),

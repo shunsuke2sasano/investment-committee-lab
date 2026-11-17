@@ -126,7 +126,7 @@ async function resolveApiKey(): Promise<string> {
   const settings = await settingsRepository.get()
   const dbKey = (settings.anthropicApiKey ?? '').trim()
   if (dbKey) return dbKey
-  return (import.meta as any).env?.VITE_ANTHROPIC_API_KEY ?? ''
+  return import.meta.env.VITE_ANTHROPIC_API_KEY ?? ''
 }
 
 async function callClaude(system: string, user: string): Promise<string> {
@@ -154,7 +154,7 @@ async function callClaude(system: string, user: string): Promise<string> {
 }
 
 // ── Parse (3-stage fallback) ──────────────────────────────────────────────
-function clampScore(v: any): 1|2|3|4|5 {
+function clampScore(v: unknown): 1|2|3|4|5 {
   const n = Number(v)
   if (!isFinite(n)) return 3
   return Math.max(1, Math.min(5, Math.round(n))) as 1|2|3|4|5
@@ -165,8 +165,9 @@ const AXIS_KEYS = [
   'valuationAttractiveness', 'marketExpectationGap', 'executionRisk', 'governance',
 ] as const
 
-function normalizeOutput(raw: any): VerdictEngineOutput {
-  const axesRaw = raw.axes ?? {}
+function normalizeOutput(raw: unknown): VerdictEngineOutput {
+  const obj = (raw ?? {}) as Record<string, unknown>
+  const axesRaw = (obj.axes ?? {}) as Record<string, { score?: unknown; comment?: unknown; veto?: unknown }>
   const axes = {} as VerdictEngineOutput['axes']
   for (const key of AXIS_KEYS) {
     const a = axesRaw[key] ?? {}
@@ -176,15 +177,15 @@ function normalizeOutput(raw: any): VerdictEngineOutput {
       veto:    !!a.veto,
     }
   }
-  return { axes, rationale: typeof raw.rationale === 'string' ? raw.rationale : '' }
+  return { axes, rationale: typeof obj.rationale === 'string' ? obj.rationale : '' }
 }
 
 function parseResponse(raw: string): VerdictEngineOutput {
-  try { return normalizeOutput(JSON.parse(raw.trim())) } catch {}
+  try { return normalizeOutput(JSON.parse(raw.trim())) } catch { /* fall through to the next parse strategy */ }
   try {
     const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
     return normalizeOutput(JSON.parse(cleaned))
-  } catch {}
+  } catch { /* fall through to the next parse strategy */ }
   const start = raw.indexOf('{')
   const end   = raw.lastIndexOf('}')
   if (start !== -1 && end > start) return normalizeOutput(JSON.parse(raw.slice(start, end + 1)))

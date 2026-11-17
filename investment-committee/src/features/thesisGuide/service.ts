@@ -13,7 +13,7 @@ async function resolveApiKey(): Promise<string> {
   const settings = await settingsRepository.get()
   const dbKey = (settings.anthropicApiKey ?? '').trim()
   if (dbKey) return dbKey
-  return (import.meta as any).env?.VITE_ANTHROPIC_API_KEY ?? ''
+  return import.meta.env.VITE_ANTHROPIC_API_KEY ?? ''
 }
 
 const SYSTEM_PROMPT = `あなたは株式投資のThesis作成を助けるアシスタントです。

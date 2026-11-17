@@ -83,8 +83,11 @@ export default function PositionPage() {
   const realizedPnl = ep != null && xp != null && sh != null ? (xp - ep) * sh : null
   const realizedPct = ep != null && xp != null && ep !== 0 ? ((xp - ep) / ep) * 100 : null
 
+  // Captured once on mount so render stays pure; a holding period in
+  // whole months does not need to tick during the session.
+  const [mountedAt] = useState(() => Date.now())
   const holdingMonths = entryDate
-    ? Math.floor((Date.now() - new Date(entryDate).getTime()) / (1000 * 60 * 60 * 24 * 30))
+    ? Math.floor((mountedAt - new Date(entryDate).getTime()) / (1000 * 60 * 60 * 24 * 30))
     : null
 
   function pnlColor(val: number | null) {
@@ -200,7 +203,7 @@ export default function PositionPage() {
           <Field label={lang === 'ja' ? '購入時Verdict' : 'Entry Verdict'}>
             <select
               value={entryVerdict}
-              onChange={e => setEntryVerdict(e.target.value as any)}
+              onChange={e => setEntryVerdict(e.target.value as 'BUY' | 'WATCH' | 'PASS' | '')}
               style={inputStyle}
             >
               <option value="" style={{ background: '#0A1520' }}>—</option>

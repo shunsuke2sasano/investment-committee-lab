@@ -3,6 +3,7 @@ import { T, Button, Select, PageLayout, SectionHeader, hexRgb, NumericInput, Inp
 import { useStore } from '../state/store'
 import { settingsRepository, exportImport, decryptAllAndStrip } from '../db/repositories'
 import { VERDICT_PROFILES } from '../types/domain'
+import type { AppSettings } from '../types/domain'
 import { t } from '../lib/i18n'
 import type { Lang } from '../lib/i18n'
 import { deriveKey, encrypt as cryptoEncrypt } from '../lib/crypto'
@@ -25,7 +26,7 @@ export default function SettingsPage() {
   const [showDisableConfirm, setShowDisableConfirm] = React.useState(false)
   const [disableLoading, setDisableLoading]         = React.useState(false)
 
-  const envKey: string = (import.meta as any).env?.VITE_ANTHROPIC_API_KEY ?? ''
+  const envKey: string = import.meta.env.VITE_ANTHROPIC_API_KEY ?? ''
   const dbKey = settings?.anthropicApiKey ?? ''
   const hasDbKey = dbKey.trim().length > 0
   const hasEnvKey = envKey.trim().length > 0
@@ -342,7 +343,7 @@ export default function SettingsPage() {
 
           <SectionHeader label={t('verdictProfileSection', lang)} color={T.pink} />
           <Select label={t('defaultProfile', lang)} value={settings.activeProfileId}
-            onChange={v => setSettings({ ...settings, activeProfileId: v as any })}
+            onChange={v => setSettings({ ...settings, activeProfileId: v as AppSettings['activeProfileId'] })}
             options={Object.values(VERDICT_PROFILES).map(p => ({ value: p.id, label: p.label }))} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
             {Object.values(VERDICT_PROFILES).map(p => (

@@ -210,8 +210,8 @@ export default function VerdictPage() {
       setAxes(applyDraftToAxes(draft.axes, axes))
       setRationale(draft.rationale)
       showToast(t('verdictAiSuccess', lang), 'success')
-    } catch (e: any) {
-      showToast(`Error: ${e.message}`, 'error')
+    } catch (e) {
+      showToast(`Error: ${e instanceof Error ? e.message : String(e)}`, 'error')
     }
     setAiLoading(false)
   }
@@ -253,8 +253,8 @@ export default function VerdictPage() {
         setAxes(newAxes)
         setRationale(verdictDraft.rationale)
       }
-    } catch (e: any) {
-      showToast(`Error: ${e.message}`, 'error')
+    } catch (e) {
+      showToast(`Error: ${e instanceof Error ? e.message : String(e)}`, 'error')
     }
     setStyleReviewLoading(null)
   }
@@ -294,8 +294,8 @@ export default function VerdictPage() {
         const currentResult = allResults.find(([sr]) => sr.style === investmentStyle)
         if (currentResult) setRationale(currentResult[1].rationale)
       }
-    } catch (e: any) {
-      showToast(`Error: ${e.message}`, 'error')
+    } catch (e) {
+      showToast(`Error: ${e instanceof Error ? e.message : String(e)}`, 'error')
     }
     setAllStylesLoading(false)
   }
