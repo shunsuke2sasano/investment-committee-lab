@@ -32,25 +32,25 @@ interface StyleDef {
 
 const STYLE_CONFIG: Record<InvestmentStyle, StyleDef> = {
   oracle: {
-    image: '/oracle.png', name: 'THE ORACLE', subtitle: 'VALUE',
+    image: '/oracle.webp', name: 'THE ORACLE', subtitle: 'VALUE',
     descEn: 'Find undervalued quality and hold', descJa: '割安な優良企業を見極め長く持つ',
     profileId: 'conservative',
     axisWeights: { valuationAttractiveness: 1.5, balanceSheetSafety: 1.3, growthQuality: 0.8 },
   },
   navigator: {
-    image: '/navigator.png', name: 'THE NAVIGATOR', subtitle: 'GARP',
+    image: '/navigator.webp', name: 'THE NAVIGATOR', subtitle: 'GARP',
     descEn: 'Balance growth and valuation', descJa: '成長性と割安性のバランスを見る',
     profileId: 'standard',
     axisWeights: { growthQuality: 1.2, valuationAttractiveness: 1.2, marketExpectationGap: 1.2 },
   },
   visionary: {
-    image: '/visionary.png', name: 'THE VISIONARY', subtitle: 'GROWTH',
+    image: '/visionary.webp', name: 'THE VISIONARY', subtitle: 'GROWTH',
     descEn: 'Bet boldly on future growth themes', descJa: '未来の成長テーマに強く賭ける',
     profileId: 'aggressive',
     axisWeights: { growthQuality: 1.5, businessQuality: 1.3, valuationAttractiveness: 0.7 },
   },
   compounder: {
-    image: '/compounder.png', name: 'THE COMPOUNDER', subtitle: 'DIVIDEND',
+    image: '/compounder.webp', name: 'THE COMPOUNDER', subtitle: 'DIVIDEND',
     descEn: 'Compounding through patience and quality', descJa: '複利・忍耐・優良企業の長期保有',
     profileId: 'conservative',
     axisWeights: { capitalEfficiency: 1.5, balanceSheetSafety: 1.3, governance: 1.3, growthQuality: 0.8 },
