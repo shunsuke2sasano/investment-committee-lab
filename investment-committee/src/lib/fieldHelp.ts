@@ -86,6 +86,13 @@ export const FIELD_HELP_JA: Record<keyof DataLaneInput, FieldHelp> = {
     bad: '1.0以下（支払い危機の可能性）',
     tip: '業種によって適正水準が異なる（小売業は1.0前後でも正常）',
   },
+  goodwillIntangiblesToAssets: {
+    what: '総資産に占めるのれん＋無形資産の割合。買収で膨らんだ資産への依存度を示す。',
+    formula: '(のれん + 無形資産) / 総資産 × 100',
+    good: '30%以下',
+    bad: '50%以上は買収依存が高く、70%以上は減損リスクが大きい',
+    tip: 'リスク審査専用の項目（品質スコアには使わない）。有形資産ベースで見た実質的な財務耐性を測る',
+  },
 }
 
 export const FIELD_HELP_EN: Record<keyof DataLaneInput, FieldHelp> = {
@@ -165,5 +172,12 @@ export const FIELD_HELP_EN: Record<keyof DataLaneInput, FieldHelp> = {
     good: '1.5+',
     bad: 'Below 1.0 (potential solvency risk)',
     tip: 'Acceptable level varies by industry (retail often runs near 1.0 normally)',
+  },
+  goodwillIntangiblesToAssets: {
+    what: 'Share of total assets made up of goodwill and intangibles — how much of the balance sheet was bought rather than built.',
+    formula: '(Goodwill + Intangible Assets) / Total Assets × 100',
+    good: 'Below 30%',
+    bad: 'Above 50% signals acquisition dependence; above 70% impairment can erase equity',
+    tip: 'Risk-screen only (not used by the quality scores). Measures tangible balance-sheet resilience',
   },
 }

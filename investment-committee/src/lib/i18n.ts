@@ -205,6 +205,7 @@ export const translations = {
   buyCandidate: { en: 'BUY CANDIDATE', ja: 'BUY候補' },
   watchLabel: { en: 'WATCH', ja: 'WATCH' },
   buyBlocked: { en: 'BUY BLOCKED', ja: 'BUY禁止' },
+  cagrUnknown: { en: 'NOT CALCULABLE', ja: '計算不可' },
   verdictBlocked: { en: '🚫 BUY BLOCKED IN VERDICT', ja: '🚫 Verdict BUY禁止' },
   verdictOk: { en: '✓ Can proceed to Verdict', ja: '✓ Verdictへ進める' },
   currentData: { en: 'CURRENT DATA', ja: '現在データ' },

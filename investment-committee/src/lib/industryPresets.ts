@@ -47,6 +47,7 @@ export const FIELD_DEFAULT_LABELS: Record<keyof DataLaneInput, string> = {
   shareDilutionAnnual: 'Share Dilution Annual',
   reinvestmentRate:    'Reinvestment Rate',
   currentRatio:        'Current Ratio',
+  goodwillIntangiblesToAssets: 'Goodwill + Intangibles / Assets',
 }
 
 export const FIELD_UNITS: Record<keyof DataLaneInput, string> = {
@@ -61,6 +62,7 @@ export const FIELD_UNITS: Record<keyof DataLaneInput, string> = {
   shareDilutionAnnual: '% / yr',
   reinvestmentRate:    '%',
   currentRatio:        'x',
+  goodwillIntangiblesToAssets: '%',
 }
 
 export const FIELD_PLACEHOLDERS: Record<keyof DataLaneInput, string> = {
@@ -75,6 +77,7 @@ export const FIELD_PLACEHOLDERS: Record<keyof DataLaneInput, string> = {
   shareDilutionAnnual: '1.2',
   reinvestmentRate:    '30.0',
   currentRatio:        '4.2',
+  goodwillIntangiblesToAssets: '25.0',
 }
 
 // ── Preset definitions ─────────────────────────────────────────────────────
@@ -317,6 +320,32 @@ export function inferPresetFromSector(sector: string | null | undefined): Preset
   if (s.includes('semiconductor') || s.includes('chip')) return 'semiconductor'
   if (s.includes('tech') || s.includes('software') || s.includes('communication') || s.includes('internet') || s.includes('cloud') || s.includes('saas')) return 'saas'
   return 'generic'
+}
+
+// ── Not-applicable metrics (coverage three-way split) ─────────────────────
+// A metric is 'not applicable' for a preset ONLY when the concept itself
+// does not exist for that industry — decided here, with a reason code,
+// never inferred from the data being unavailable. For financials the
+// preset relabels these fields as proxies (NIM, leverage ratio, …), but
+// as inputs to the generic quality scores the concepts do not apply:
+// banks have no cost-of-goods gross margin, no free-cash-flow margin in
+// the industrial sense, debt is raw material rather than leverage to be
+// measured against EBITDA, and bank balance sheets are not classified
+// into current / non-current.
+export const NOT_APPLICABLE_METRICS: Partial<Record<PresetId, Partial<Record<keyof DataLaneInput, string>>>> = {
+  financials: {
+    grossMargin:    'financials_no_gross_margin',
+    fcfMargin:      'financials_no_fcf_concept',
+    debtToEbitda:   'financials_debt_is_raw_material',
+    currentRatio:   'financials_no_current_classification',
+  },
+}
+
+export const NA_REASON_LABELS: Record<string, { en: string; ja: string }> = {
+  financials_no_gross_margin:           { en: 'No gross-margin concept (no cost of goods)', ja: '売上原価の概念がなく粗利率は適用外' },
+  financials_no_fcf_concept:            { en: 'FCF margin is not an industrial-style metric for financials', ja: '金融業ではFCFマージンの概念が適用外' },
+  financials_debt_is_raw_material:      { en: 'Debt is raw material, not leverage vs EBITDA', ja: '負債は原材料でありEBITDA対比のレバレッジは適用外' },
+  financials_no_current_classification: { en: 'Balance sheet is not split into current / non-current', ja: '貸借対照表が流動/固定に区分されず流動比率は適用外' },
 }
 
 // ── Label resolver ─────────────────────────────────────────────────────────

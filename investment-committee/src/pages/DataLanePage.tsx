@@ -4,13 +4,13 @@ import { T, NumericInput, Button, PageLayout, SectionHeader, ScoreBadge, Select,
 import { useStore } from '../state/store'
 import { t } from '../lib/i18n'
 import { dataAnalysisRepository, companyRepository } from '../db/repositories'
-import { calculateDataScores, buildDataSummary, calculateYoY, detectTrend } from '../lib/calculators'
+import { calculateDataScores, buildDataSummary, calculateYoY, detectTrend, calculateDataCoverage, evaluateFinancialRisk, isScoreInsufficient } from '../lib/calculators'
 import type { DataLaneInput, DataLaneScores, DataAnalysis, FiscalPeriodData } from '../types/domain'
 import { isJapaneseStock, fetchFmpFinancials } from '../lib/fmpClient'
 import { parseCSV, mergePeriodsCSV, exportToCSV, generateTemplate, downloadCSV, CSV_COLUMNS } from '../lib/csvParser'
 import type { SkippedRow } from '../lib/csvParser'
 import {
-  INDUSTRY_PRESETS, PRESET_LIST, inferPresetFromSector,
+  INDUSTRY_PRESETS, PRESET_LIST, inferPresetFromSector, NOT_APPLICABLE_METRICS,
   getFieldLabel, FIELD_UNITS, FIELD_PLACEHOLDERS,
   type PresetId, type IndustryPreset, type PresetFieldGroup, type ColorToken,
 } from '../lib/industryPresets'
@@ -333,8 +333,8 @@ function CsvPreviewPanel({ preview, skipped, lang, onApply, onCancel }: {
                 {visibleCols.map(({ field }) => {
                   const v = p.input[field]
                   return (
-                    <td key={field} style={{ color: v !== null ? T.text : T.textDim, padding: '4px 10px', textAlign: 'right', borderBottom: `1px solid ${T.borderDim}22` }}>
-                      {v !== null ? v.toFixed(1) : '—'}
+                    <td key={field} style={{ color: v !== null && v !== undefined ? T.text : T.textDim, padding: '4px 10px', textAlign: 'right', borderBottom: `1px solid ${T.borderDim}22` }}>
+                      {v !== null && v !== undefined ? v.toFixed(1) : '—'}
                     </td>
                   )
                 })}
@@ -453,6 +453,9 @@ export default function DataLanePage() {
   const activeInput = periods[activePeriodIdx]?.input ?? EMPTY_INPUT
   const prevInput   = periods[activePeriodIdx + 1]?.input ?? null
   const liveScores  = calculateDataScores(activeInput)
+  const liveCoverage = calculateDataCoverage(activeInput, NOT_APPLICABLE_METRICS[presetId])
+  const liveRisk = evaluateFinancialRisk(activeInput, periods)
+  const liveRiskFlags = liveRisk.flags
   const filledCount = Object.values(activeInput).filter(v => v !== null).length
 
   const chronoPeriods = [...periods].reverse()
@@ -531,12 +534,15 @@ export default function DataLanePage() {
     try {
       const latestInput = periods[0].input
       const scores  = calculateDataScores(latestInput)
-      const summary = buildDataSummary(scores, latestInput)
+      const summary = buildDataSummary(scores, latestInput, calculateDataCoverage(latestInput, NOT_APPLICABLE_METRICS[presetId]))
       const d = await dataAnalysisRepository.save({
         companyId, input: latestInput, scores, summary,
         computedAt: new Date().toISOString(),
         periods,
         presetId,
+        coverage: calculateDataCoverage(latestInput, NOT_APPLICABLE_METRICS[presetId]),
+        riskFlags: evaluateFinancialRisk(latestInput, periods).flags,
+        riskLevel: evaluateFinancialRisk(latestInput, periods).level,
       })
       setSaved(d)
       showToast('Data Lane saved', 'success')
@@ -801,6 +807,77 @@ export default function DataLanePage() {
               )}
             </div>
           ))}
+        </div>
+
+        {/* ── Coverage & financial risk screen ─────────────────────────────── */}
+        <div style={{ marginBottom: 24, border: `1px solid ${T.borderDim}`, padding: '12px 16px', background: 'rgba(255,255,255,0.02)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ color: T.textMid, fontSize: 9, letterSpacing: 2 }}>
+              {lang === 'ja' ? 'データ充足度と財務リスク審査' : 'DATA COVERAGE & RISK SCREEN'}
+            </span>
+            <span style={{ color: liveCoverage.overall >= 0.75 ? T.green : liveCoverage.overall >= 0.5 ? T.yellow : T.red, fontSize: 11, fontFamily: "'Courier New', monospace" }}>
+              {Math.round(liveCoverage.overall * 100)}% ({liveCoverage.usedMetrics}/{liveCoverage.totalMetrics})
+              {liveCoverage.naReasons && Object.keys(liveCoverage.naReasons).length > 0 && (
+                <span style={{ color: T.textDim, fontSize: 9, marginLeft: 6 }}>
+                  {lang === 'ja' ? `適用外${Object.keys(liveCoverage.naReasons).length}件を除く` : `excl. ${Object.keys(liveCoverage.naReasons).length} N/A`}
+                </span>
+              )}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: liveRiskFlags.length > 0 ? 10 : 0 }}>
+            {([
+              { label: 'Business Quality', key: 'businessQuality' as keyof DataLaneScores },
+              { label: 'Capital Efficiency', key: 'capitalEfficiency' as keyof DataLaneScores },
+              { label: 'Balance Sheet Safety', key: 'balanceSheetSafety' as keyof DataLaneScores },
+              { label: 'Cash Generation', key: 'cashGeneration' as keyof DataLaneScores },
+            ]).map(({ label, key }) => (
+              <span key={key} style={{ fontSize: 10, color: isScoreInsufficient(liveCoverage, key) ? T.red : T.textDim }}>
+                {label}: {Math.round(liveCoverage.perScore[key] * 100)}%
+                {isScoreInsufficient(liveCoverage, key) ? (lang === 'ja' ? '（判定不能）' : ' (insufficient)') : ''}
+              </span>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 9, letterSpacing: 1, color: T.textMid }}>
+              {lang === 'ja' ? 'リスク状態:' : 'RISK LEVEL:'}
+            </span>
+            <span style={{
+              fontSize: 9, letterSpacing: 1, padding: '1px 6px',
+              color: liveRisk.level === 'severe' ? '#fff' : liveRisk.level === 'caution' ? T.yellow : liveRisk.level === 'normal' ? T.green : T.textDim,
+              background: liveRisk.level === 'severe' ? T.red : 'transparent',
+              border: `1px solid ${liveRisk.level === 'severe' ? T.red : liveRisk.level === 'caution' ? T.yellow : liveRisk.level === 'normal' ? T.green : T.borderDim}`,
+            }}>
+              {liveRisk.level === 'severe' ? (lang === 'ja' ? '重大' : 'SEVERE')
+                : liveRisk.level === 'caution' ? (lang === 'ja' ? '要注意' : 'CAUTION')
+                : liveRisk.level === 'normal' ? (lang === 'ja' ? '正常' : 'NORMAL')
+                : (lang === 'ja' ? '評価不能' : 'UNEVALUABLE')}
+            </span>
+          </div>
+          {liveRisk.level === 'unevaluable' ? (
+            <div style={{ fontSize: 11, color: T.textDim }}>
+              {lang === 'ja' ? 'データ不足のため財務リスクを評価できません（「正常」ではありません）。' : 'Not enough data to evaluate financial risk (this is not "normal").'}
+            </div>
+          ) : liveRiskFlags.length === 0 ? (
+            <div style={{ fontSize: 11, color: T.textDim }}>
+              {lang === 'ja' ? 'リスクフラグはありません（入力済み指標の範囲）。' : 'No risk flags (within the entered metrics).'}
+            </div>
+          ) : (
+            liveRiskFlags.map(f => (
+              <div key={f.id} style={{ display: 'flex', gap: 8, alignItems: 'baseline', marginTop: 6 }}>
+                <span style={{
+                  fontSize: 9, letterSpacing: 1, padding: '1px 6px', whiteSpace: 'nowrap',
+                  color: f.severity === 'severe' ? '#fff' : T.yellow,
+                  background: f.severity === 'severe' ? T.red : 'transparent',
+                  border: `1px solid ${f.severity === 'severe' ? T.red : T.yellow}`,
+                }}>
+                  {f.severity === 'severe' ? (lang === 'ja' ? '重大' : 'SEVERE') : (lang === 'ja' ? '注意' : 'CAUTION')}
+                </span>
+                <span style={{ fontSize: 11, color: T.text, lineHeight: 1.5 }}>
+                  {f.label} — <span style={{ color: T.textMid }}>{f.detail}</span>
+                </span>
+              </div>
+            ))
+          )}
         </div>
 
         {/* ── Trend charts ─────────────────────────────────────────────────── */}

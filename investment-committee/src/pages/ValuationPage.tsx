@@ -5,7 +5,7 @@ import { useStore } from '../state/store'
 import { t } from '../lib/i18n'
 import type { Lang } from '../lib/i18n'
 import { valuationRepository, companyRepository } from '../db/repositories'
-import { calculateValuation, DEFAULT_CAGR_GATE_MIN } from '../lib/calculators'
+import { calculateValuation, DEFAULT_CAGR_GATE_MIN, isSuspiciouslyHighCagr } from '../lib/calculators'
 import type { ValuationAssumptions } from '../types/domain'
 
 const EMPTY: ValuationAssumptions = {
@@ -49,14 +49,15 @@ export default function ValuationPage() {
 
   const calc = calculateValuation(assumptions, cagrGateMin)
   const cagrColor = calc.expectedCagr === null ? T.textDim : calc.cagrGate === 'pass' ? T.green : calc.cagrGate === 'watch' ? T.yellow : T.red
-  const cagrLabel = calc.cagrGate === 'pass' ? t('buyCandidate', lang) : calc.cagrGate === 'watch' ? t('watchLabel', lang) : t('buyBlocked', lang)
+  // 'unknown' (uncalculable) is its own state — never label it as blocked.
+  const cagrLabel = calc.cagrGate === 'pass' ? t('buyCandidate', lang) : calc.cagrGate === 'watch' ? t('watchLabel', lang) : calc.cagrGate === 'unknown' ? t('cagrUnknown', lang) : t('buyBlocked', lang)
 
   async function handleSave() {
     if (!companyId) return
     setLoading(true)
     try {
-      const { bear, base, bull, expectedCagr, cagrGate, downsideRiskScore } = calculateValuation(assumptions, cagrGateMin)
-      const v = await valuationRepository.save({ companyId, assumptions, scenarios: { bear, base, bull }, expectedCagr, cagrGate, downsideRiskScore, createdAt: new Date().toISOString() })
+      const { bear, base, bull, expectedCagr, cagrGate, downsideRiskScore, impliedGrowthPct } = calculateValuation(assumptions, cagrGateMin)
+      const v = await valuationRepository.save({ companyId, assumptions, scenarios: { bear, base, bull }, expectedCagr, cagrGate, downsideRiskScore, impliedGrowthPct, createdAt: new Date().toISOString() })
       setSavedAt(v.createdAt)
       showToast('Valuation saved', 'success')
     } catch { showToast(t('saveFailed', lang), 'error') }
@@ -84,7 +85,7 @@ export default function ValuationPage() {
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ color: cagrColor, fontSize: 22, fontWeight: 700, letterSpacing: 3, marginBottom: 10 }}>{calc.expectedCagr !== null ? cagrLabel : '—'}</div>
+            <div style={{ color: cagrColor, fontSize: 22, fontWeight: 700, letterSpacing: 3, marginBottom: 10 }}>{cagrLabel}</div>
             {calc.expectedCagr !== null && calc.cagrGate === 'block' && (
               <div style={{ color: T.red, border: `1px solid ${T.red}`, padding: '6px 16px', fontSize: 11, letterSpacing: 2 }}>{t('verdictBlocked', lang)}</div>
             )}
@@ -93,6 +94,32 @@ export default function ValuationPage() {
             )}
           </div>
         </div>
+
+        {/* Implied growth (reverse calculation) + value-trap warning */}
+        {(calc.impliedGrowthPct !== null || isSuspiciouslyHighCagr(calc.expectedCagr)) && (
+          <div style={{ border: `1px solid ${T.borderDim}`, padding: '12px 16px', marginBottom: 24, background: 'rgba(255,255,255,0.02)' }}>
+            {calc.impliedGrowthPct !== null && (
+              <div style={{ fontSize: 11, color: T.text, lineHeight: 1.7 }}>
+                {lang === 'ja' ? '現在価格が織り込む成長率' : 'Growth priced into the current price'}
+                <span style={{ fontFamily: "'Courier New', monospace", fontWeight: 700, marginLeft: 8 }}>
+                  {calc.impliedGrowthPct.toFixed(1)}% / {lang === 'ja' ? '年' : 'yr'}
+                </span>
+                <span style={{ color: T.textDim, marginLeft: 8 }}>
+                  {lang === 'ja'
+                    ? '（BaseのFCFマージンと出口倍率を前提に逆算した、期待CAGRが0%になる＝現在EVをちょうど正当化する成長率。要求リターンを達成するために必要な成長率ではありません）— 自分の成長想定がこれを上回る根拠があるかが判断の核心です。'
+                    : '(reverse-calculated at Base FCF margin and exit multiple: the growth at which expected CAGR is 0% — the current EV is exactly justified. It is NOT the growth needed to earn a required return) — the question is whether your own forecast can credibly beat this.'}
+                </span>
+              </div>
+            )}
+            {isSuspiciouslyHighCagr(calc.expectedCagr) && (
+              <div style={{ fontSize: 11, color: T.orange, lineHeight: 1.7, marginTop: calc.impliedGrowthPct !== null ? 6 : 0 }}>
+                {lang === 'ja'
+                  ? `⚠ 期待CAGRが ${calc.expectedCagr!.toFixed(1)}% と極端に高くなっています。株価が暴落した問題企業ほど、機械計算では「割安」に見えます。割安の根拠が「株価が下がったから」だけになっていないか、前提（成長率・FCFマージン）を確認してください。`
+                  : `⚠ Expected CAGR of ${calc.expectedCagr!.toFixed(1)}% is extremely high. Crashed, troubled companies look mechanically "cheap" — check whether the case rests only on the price having fallen.`}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 3 scenarios */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 24 }}>
