@@ -356,9 +356,8 @@ export const positionRepository = {
 // or delete. Corrections and additions are new events / evaluations.
 // Creation is atomic: the record and its 'created' event are written in a
 // single transaction, re-validated inside it, so a double-click or a
-// second tab cannot fork the hash chain or double-register the same
-// decision moment (see create() for why the crypto runs outside the
-// transaction).
+// second tab cannot double-register the same decision moment (see
+// create() for why the crypto runs outside the transaction).
 export const decisionLogRepository = {
   /** All source records for a company, for point-in-time (as-of) assembly
    * in lib/decisionLog. Selection by timestamp happens there, purely. */
@@ -382,16 +381,16 @@ export const decisionLogRepository = {
     // Dexie-transaction-aware: awaiting them inside a transaction commits
     // it early (PrematureCommitError). So all crypto happens first, and
     // the transaction itself contains only IndexedDB operations — a
-    // re-validation on plaintext fields (duplicate scan + row count)
-    // followed by the two inserts. The write stays atomic: either both
-    // rows land or neither does, and a concurrent insert from another tab
-    // is detected by the count check and rejected instead of forking the
-    // hash chain.
+    // duplicate re-check on plaintext fields followed by the two inserts.
+    // The write stays atomic: either both rows land or neither does.
+    // Integrity is per-record (individual contentHash); Phase A has no
+    // global hash chain (Issue #6, mandatory fix A).
     const existing = await decRows<DecisionLogRecord>(await db.decision_logs.toArray())
     // Duplicate guard: same verdict + same decision moment = the same
     // decision submitted twice. A later re-decision on the same verdict
     // has a different decidedAt and is allowed (it links back via
-    // previousLogId).
+    // previousLogId). The &[verdictReportId+decidedAt] unique index is
+    // the final backstop behind this check and the in-transaction one.
     if (draft.verdictReportId) {
       const dup = existing.find(l =>
         l.verdictReportId === draft.verdictReportId && l.decidedAt === draft.decidedAt)
@@ -399,17 +398,12 @@ export const decisionLogRepository = {
     }
     const sameVerdict = existing
       .filter(l => draft.verdictReportId != null && l.verdictReportId === draft.verdictReportId)
-      .sort((a, b) => a.seq - b.seq)
-    // Chain order is the seq order, never the wall clock (timestamps tie).
-    const prev = existing.reduce<DecisionLogRecord | undefined>(
-      (acc, l) => (acc == null || l.seq > acc.seq ? l : acc), undefined)
+      .sort((a, b) => (a.createdAt + a.id).localeCompare(b.createdAt + b.id))
 
     const record: DecisionLogRecord = {
       ...draft,
       id: uid(),
-      seq: prev ? prev.seq + 1 : 0,
       previousLogId: sameVerdict.length > 0 ? sameVerdict[sameVerdict.length - 1].id : null,
-      prevLogHash: prev ? prev.contentHash : null,
       contentHash: '',
     }
     record.contentHash = await hashLogBody(record)
@@ -422,9 +416,8 @@ export const decisionLogRepository = {
     const encEvent = await encRow(event, PLAIN.decisionLogEvent)
 
     await db.transaction('rw', [db.decision_logs, db.decision_log_events], async () => {
-      const raw = await db.decision_logs.toArray() as unknown as Record<string, unknown>[]
-      if (raw.length !== existing.length) throw new Error('concurrent_modification')
       if (draft.verdictReportId) {
+        const raw = await db.decision_logs.toArray() as unknown as Record<string, unknown>[]
         const dup = raw.find(r =>
           r.verdictReportId === draft.verdictReportId && r.decidedAt === draft.decidedAt)
         if (dup) throw new Error('duplicate_decision_log')

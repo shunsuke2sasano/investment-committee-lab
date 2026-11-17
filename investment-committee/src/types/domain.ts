@@ -496,10 +496,6 @@ export type ComparisonExclusion =
 
 export interface DecisionLogRecord {
   id: string
-  /** Monotonic creation sequence (0-based), assigned by the repository.
-   * The hash chain is ordered by seq — wall-clock timestamps can tie at
-   * millisecond resolution and must not decide the chain order. */
-  seq: number
   schemaVersion: 1
   companyId: string
   ticker: string
@@ -580,10 +576,10 @@ export interface DecisionLogRecord {
   linkedPositionId: string | null
 
   // Integrity: SHA-256 over the whole record except contentHash itself
-  // (id, decidedAt, createdAt and prevLogHash included). Tamper *detection*
-  // for one's own records — not third-party proof (Issue #6, P0-4).
+  // (id, decidedAt, createdAt included). Per-record hashes only — Phase A
+  // deliberately has no global hash chain (Issue #6, mandatory fix A).
+  // Tamper *detection* for one's own records — not third-party proof.
   contentHash: string
-  prevLogHash: string | null
 }
 
 export type DecisionLogEventType =

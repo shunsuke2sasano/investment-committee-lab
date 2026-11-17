@@ -29,7 +29,6 @@ export default function DecisionLogPage() {
   const [logs, setLogs] = useState<DecisionLogRecord[]>([])
   const [evaluations, setEvaluations] = useState<DecisionLogEvaluation[]>([])
   const [hashOk, setHashOk] = useState<Map<string, boolean>>(new Map())
-  const [chainOk, setChainOk] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [eventsState, setEventsState] = useState<{ logId: string; items: DecisionLogEvent[] }>({ logId: '', items: [] })
   const events = eventsState.logId === selectedId ? eventsState.items : []
@@ -53,12 +52,6 @@ export default function DecisionLogPage() {
       setLogs(all)
       setEvaluations(evals)
       setHashOk(checks)
-      const bySeq = [...all].sort((a, b) => a.seq - b.seq)
-      let ok = true
-      for (let i = 1; i < bySeq.length; i++) {
-        if (bySeq[i].prevLogHash !== bySeq[i - 1].contentHash) { ok = false; break }
-      }
-      setChainOk(ok)
     })
     return () => { cancelled = true }
   }, [])
@@ -163,9 +156,14 @@ export default function DecisionLogPage() {
           </div>
         }
       >
-        <div style={{ fontSize: 11, color: chainOk ? T.green : T.red, marginBottom: 12 }}>
-          chain: {chainOk ? 'OK' : 'BROKEN'}
-        </div>
+        {logs.length > 0 && (
+          <div style={{
+            fontSize: 11, marginBottom: 12,
+            color: logs.every(l => hashOk.get(l.id)) ? T.green : T.red,
+          }}>
+            integrity: {logs.filter(l => hashOk.get(l.id)).length}/{logs.length} records verified
+          </div>
+        )}
 
         {logs.length === 0 ? (
           <div style={{ color: T.textDim, fontSize: 12 }}>{t('decisionLogEmpty', lang)}</div>
