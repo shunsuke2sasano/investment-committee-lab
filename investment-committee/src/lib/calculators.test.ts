@@ -454,3 +454,25 @@ describe('buildDataSummary — insufficient scores are annotated, never silent',
     expect(summary).not.toContain('insufficient')
   })
 })
+
+describe('assessFinancialRisk — persistent negative FCF (review fix)', () => {
+  const period = (fcfMargin: number | null) => ({
+    input: input({ fcfMargin }), fiscalYear: 'FY2024',
+  })
+  it('fires for an ongoing cash burn, even with a negative operating margin', () => {
+    const inp = input({ fcfMargin: -3, operatingMargin: -2 })
+    const flags = assessFinancialRisk(inp, [period(-3), period(-8), period(-5)])
+    expect(flags.some(f => f.id === 'fcf_negative_history')).toBe(true)
+  })
+  it('still fires when the latest period has recovered', () => {
+    const inp = input({ fcfMargin: 4, operatingMargin: 10 })
+    const flags = assessFinancialRisk(inp, [period(4), period(-6), period(-2)])
+    expect(flags.some(f => f.id === 'fcf_negative_history')).toBe(true)
+  })
+  it('a single negative year does not fire, and nulls do not count', () => {
+    const inp = input({ fcfMargin: -3, operatingMargin: 5 })
+    expect(assessFinancialRisk(inp, [period(-3), period(null), period(6)]).some(f => f.id === 'fcf_negative_history')).toBe(false)
+    expect(assessFinancialRisk(inp, [period(-3)]).some(f => f.id === 'fcf_negative_history')).toBe(false)
+    expect(assessFinancialRisk(inp).some(f => f.id === 'fcf_negative_history')).toBe(false)
+  })
+})

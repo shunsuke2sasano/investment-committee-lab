@@ -106,8 +106,8 @@ export default function ValuationPage() {
                 </span>
                 <span style={{ color: T.textDim, marginLeft: 8 }}>
                   {lang === 'ja'
-                    ? '（BaseのFCFマージンと出口倍率を前提に逆算）— 自分の成長想定がこれを上回る根拠があるかが判断の核心です。'
-                    : '(reverse-calculated at Base FCF margin and exit multiple) — the question is whether your own forecast can credibly beat this.'}
+                    ? '（BaseのFCFマージンと出口倍率を前提に逆算した、期待CAGRが0%になる＝現在EVをちょうど正当化する成長率。要求リターンを達成するために必要な成長率ではありません）— 自分の成長想定がこれを上回る根拠があるかが判断の核心です。'
+                    : '(reverse-calculated at Base FCF margin and exit multiple: the growth at which expected CAGR is 0% — the current EV is exactly justified. It is NOT the growth needed to earn a required return) — the question is whether your own forecast can credibly beat this.'}
                 </span>
               </div>
             )}

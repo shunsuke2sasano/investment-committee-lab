@@ -236,14 +236,18 @@ export function assessFinancialRisk(
     })
   }
 
-  // Persistent negative FCF across periods (single-year dips are common)
+  // Persistent negative FCF across periods (single-year dips are common).
+  // Fires on the pattern itself — two or more negative periods — whether
+  // or not the latest period has recovered. (Review fix, 2026-11-17: the
+  // earlier condition required the latest FCF to be >= 0, so an ongoing
+  // cash burn with a negative operating margin tripped no flag at all.)
   if (periods && periods.length >= 2) {
     const negYears = periods.filter(p => p.input.fcfMargin !== null && p.input.fcfMargin < 0).length
-    if (negYears >= 2 && fcf !== null && fcf >= 0) {
+    if (negYears >= 2) {
       push({
         id: 'fcf_negative_history', severity: 'caution', vetoAxis: 'executionRisk',
-        label: '過去に複数年のFCFマイナス',
-        detail: `直近 ${periods.length} 期中 ${negYears} 期でFCFマージンがマイナスです。`,
+        label: 'FCFマージンが複数年マイナス',
+        detail: `直近 ${periods.length} 期中 ${negYears} 期でFCFマージンがマイナスです${fcf !== null && fcf < 0 ? '（直近期もマイナスが継続しています）' : ''}。`,
       })
     }
   }
