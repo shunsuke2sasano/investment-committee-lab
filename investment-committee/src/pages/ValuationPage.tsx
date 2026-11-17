@@ -5,7 +5,7 @@ import { useStore } from '../state/store'
 import { t } from '../lib/i18n'
 import type { Lang } from '../lib/i18n'
 import { valuationRepository, companyRepository } from '../db/repositories'
-import { calculateValuation } from '../lib/calculators'
+import { calculateValuation, DEFAULT_CAGR_GATE_MIN } from '../lib/calculators'
 import type { ValuationAssumptions } from '../types/domain'
 
 const EMPTY: ValuationAssumptions = {
@@ -17,7 +17,8 @@ export default function ValuationPage() {
   const { id: companyId } = useParams<{ id: string }>()
   const companies = useStore(s => s.companies)
   const company = companies.find(c => c.id === companyId)
-  const { showToast, lang } = useStore()
+  const { showToast, lang, settings } = useStore()
+  const cagrGateMin = settings?.cagrGateMin ?? DEFAULT_CAGR_GATE_MIN
   const [assumptions, setAssumptions] = useState<ValuationAssumptions>(EMPTY)
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -46,7 +47,7 @@ export default function ValuationPage() {
     })
   }, [companyId])
 
-  const calc = calculateValuation(assumptions)
+  const calc = calculateValuation(assumptions, cagrGateMin)
   const cagrColor = calc.expectedCagr === null ? T.textDim : calc.cagrGate === 'pass' ? T.green : calc.cagrGate === 'watch' ? T.yellow : T.red
   const cagrLabel = calc.cagrGate === 'pass' ? t('buyCandidate', lang) : calc.cagrGate === 'watch' ? t('watchLabel', lang) : t('buyBlocked', lang)
 
@@ -54,7 +55,7 @@ export default function ValuationPage() {
     if (!companyId) return
     setLoading(true)
     try {
-      const { bear, base, bull, expectedCagr, cagrGate, downsideRiskScore } = calculateValuation(assumptions)
+      const { bear, base, bull, expectedCagr, cagrGate, downsideRiskScore } = calculateValuation(assumptions, cagrGateMin)
       const v = await valuationRepository.save({ companyId, assumptions, scenarios: { bear, base, bull }, expectedCagr, cagrGate, downsideRiskScore, createdAt: new Date().toISOString() })
       setSavedAt(v.createdAt)
       showToast('Valuation saved', 'success')
@@ -70,7 +71,7 @@ export default function ValuationPage() {
         <div style={{ border: `1px solid ${T.amber}`, borderLeft: `2px solid ${T.amber}`, padding: '12px 16px', marginBottom: 20, background: `rgba(${hexRgb(T.amber)},0.04)` }}>
           <div style={{ color: T.amber, fontSize: 9, letterSpacing: 4, marginBottom: 4 }}>VALUATION GATE — Investment = Company × Price</div>
           <div style={{ color: T.textDim, fontSize: 11, lineHeight: 1.7 }}>
-            期待CAGR &lt; 12% → BUY禁止（Verdict画面でブロック）。FCFベースのシナリオ計算。
+            期待CAGR &lt; {cagrGateMin}% → BUY禁止（Verdict画面でブロック）。FCFベースのシナリオ計算。
           </div>
         </div>
 

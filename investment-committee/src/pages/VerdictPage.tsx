@@ -11,7 +11,7 @@ import {
   verdictRepository, valuationRepository, dataAnalysisRepository,
   marketAnalysisRepository, thesisRepository, reviewRepository,
 } from '../db/repositories'
-import { calculateVerdict } from '../lib/calculators'
+import { calculateVerdict, cagrGateFor, DEFAULT_CAGR_GATE_MIN } from '../lib/calculators'
 import type { VerdictAxes, AxisScore, VerdictReport, DataAnalysis, MarketAnalysis } from '../types/domain'
 import { VERDICT_PROFILES } from '../types/domain'
 import { generateVerdictDraft, applyDraftToAxes } from '../features/verdictEngine/service'
@@ -133,7 +133,7 @@ export default function VerdictPage() {
   const [saved, setSaved] = useState<VerdictReport | null>(null)
   const [loading, setLoading] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
-  const [cagrBlocked, setCagrBlocked] = useState(false)
+  const [valuationCagr, setValuationCagr] = useState<number | null>(null)
   const [investmentStyle, setInvestmentStyle] = useState<InvestmentStyle>(PROFILE_TO_STYLE[activeProfile.id] ?? 'navigator')
   const [feed, setFeed] = useState<LaneFeed>({})
   const [styleReviews, setStyleReviews] = useState<Partial<Record<InvestmentStyle, StyleReviewResult>>>({})
@@ -155,7 +155,7 @@ export default function VerdictPage() {
         setSaved(verdict)
         setInvestmentStyle(PROFILE_TO_STYLE[verdict.profileUsed.id] ?? 'navigator')
       }
-      if (valuation?.cagrGate === 'block') setCagrBlocked(true)
+      setValuationCagr(valuation?.expectedCagr ?? null)
       setFeed(buildFeed(data, market))
     })
   }, [companyId])
@@ -163,7 +163,13 @@ export default function VerdictPage() {
   const currentStyle   = STYLE_CONFIG[investmentStyle]
   const currentProfile = VERDICT_PROFILES[currentStyle.profileId]
   const currentWeights = currentStyle.axisWeights
-  const { totalScore, vetoCount, verdict } = calculateVerdict(axes, currentProfile, currentWeights)
+  // Re-derive the gate from the saved expected CAGR and the *current*
+  // Settings minimum, so changing cagrGateMin takes effect without
+  // re-saving the valuation. No valuation yet → gate is null → no block.
+  const cagrGateMin = settings?.cagrGateMin ?? DEFAULT_CAGR_GATE_MIN
+  const cagrGate    = cagrGateFor(valuationCagr, cagrGateMin)
+  const cagrBlocked = cagrGate === 'block'
+  const { totalScore, vetoCount, verdict } = calculateVerdict(axes, currentProfile, currentWeights, { cagrGate })
 
   function updateAxis(key: keyof VerdictAxes, patch: Partial<AxisScore>) {
     setAxes(p => ({ ...p, [key]: { ...p[key], ...patch } }))
@@ -306,7 +312,7 @@ export default function VerdictPage() {
     if (!companyId) return
     setLoading(true)
     try {
-      const { totalScore, vetoCount, verdict } = calculateVerdict(axes, currentProfile, currentWeights)
+      const { totalScore, vetoCount, verdict } = calculateVerdict(axes, currentProfile, currentWeights, { cagrGate })
       const v = await verdictRepository.save({
         companyId,
         axisScores: axes,
@@ -350,10 +356,10 @@ export default function VerdictPage() {
         {cagrBlocked && (
           <div style={{ border: `2px solid ${T.red}`, background: `rgba(${hexRgb(T.red)},0.08)`, padding: '14px 20px', marginBottom: 20 }}>
             <div style={{ color: T.red, fontSize: 12, fontWeight: 700, letterSpacing: 2 }}>
-              🚫 VALUATION GATE — 期待CAGR &lt; 12%
+              🚫 VALUATION GATE — 期待CAGR &lt; {cagrGateMin}%
             </div>
             <div style={{ color: T.textDim, fontSize: 11, marginTop: 4 }}>
-              Valuationページで期待CAGRが12%を下回っています。BUYは自動的にWATCHにダウングレードされます。
+              Valuationページで期待CAGRが{cagrGateMin}%を下回っています。BUYは自動的にWATCHにダウングレードされます。
             </div>
           </div>
         )}

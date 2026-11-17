@@ -229,7 +229,7 @@ export interface ValuationReport {
     bull: ValuationScenario
   }
   expectedCagr: number | null          // base case
-  cagrGate: 'pass' | 'watch' | 'block' // >= 20 / 12-20 / < 12
+  cagrGate: 'pass' | 'watch' | 'block' // >= max(20, gateMin) / gateMin-20 / < gateMin (gateMin = settings.cagrGateMin, default 12)
   downsideRiskScore: number            // bear CAGR delta from base
   createdAt: string
 }
